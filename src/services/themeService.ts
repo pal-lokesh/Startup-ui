@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Theme, ThemeFormData } from '../types';
+import { Theme, ThemeFormData, BusinessThemeSummaryDto } from '../types';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
@@ -62,6 +62,12 @@ export class ThemeService {
   // Get theme count
   static async getThemeCount(): Promise<number> {
     const response = await apiClient.get('/themes/count');
+    return response.data;
+  }
+
+  // Get minimal grouped view: business name + themes
+  static async getThemesByBusinessSummary(): Promise<BusinessThemeSummaryDto[]> {
+    const response = await apiClient.get('/themes/by-business/summary');
     return response.data;
   }
 }

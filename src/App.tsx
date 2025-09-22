@@ -11,6 +11,7 @@ import VendorManagement from './pages/VendorManagement';
 import BusinessManagement from './pages/BusinessManagement';
 import ThemeManagement from './pages/ThemeManagement';
 import ImageManagement from './pages/ImageManagement';
+import ExploreThemes from './pages/ExploreThemes';
 import Unauthorized from './pages/Unauthorized';
 
 // Components
@@ -88,6 +89,11 @@ const AppContent: React.FC = () => {
           <Route path="/themes" element={
             <ProtectedRoute>
               <ThemeManagement />
+            </ProtectedRoute>
+          } />
+          <Route path="/explore" element={
+            <ProtectedRoute>
+              <ExploreThemes />
             </ProtectedRoute>
           } />
           <Route path="/images" element={

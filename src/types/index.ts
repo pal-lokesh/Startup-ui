@@ -61,6 +61,18 @@ export interface Theme {
   updatedAt: string;
 }
 
+// Summary DTOs for UI listing
+export interface ThemeSummaryDto {
+  themeId: string;
+  themeName: string;
+}
+
+export interface BusinessThemeSummaryDto {
+  businessId: string;
+  businessName: string;
+  themes: ThemeSummaryDto[];
+}
+
 // Image Types
 export interface Image {
   imageId: string;
