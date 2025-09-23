@@ -17,7 +17,7 @@ const Unauthorized: React.FC = () => {
   };
 
   const handleGoHome = () => {
-    navigate('/dashboard');
+    navigate('/explore');
   };
 
   return (
@@ -46,7 +46,7 @@ const Unauthorized: React.FC = () => {
               Go Back
             </Button>
             <Button variant="contained" onClick={handleGoHome}>
-              Go to Dashboard
+              Go to Explore
             </Button>
           </Box>
         </Paper>

@@ -6,6 +6,7 @@ import { Box } from '@mui/material';
 
 // Pages
 import Dashboard from './pages/Dashboard';
+import VendorDashboard from './pages/VendorDashboard';
 import UserManagement from './pages/UserManagement';
 import VendorManagement from './pages/VendorManagement';
 import BusinessManagement from './pages/BusinessManagement';
@@ -40,7 +41,7 @@ const theme = createTheme({
 
 // Main App Content Component
 const AppContent: React.FC = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return (
@@ -65,10 +66,23 @@ const AppContent: React.FC = () => {
       <Navigation />
       <Box component="main" sx={{ flexGrow: 1, p: 3, marginTop: 8 }}>
         <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={
+            <Navigate to={
+              user && user.userType === 'CLIENT' 
+                ? '/explore' 
+                : user && user.userType === 'VENDOR' 
+                ? '/vendor-dashboard' 
+                : '/dashboard'
+            } replace />
+          } />
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/vendor-dashboard" element={
+            <ProtectedRoute>
+              <VendorDashboard />
             </ProtectedRoute>
           } />
           <Route path="/users" element={
@@ -102,7 +116,15 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           } />
           <Route path="/unauthorized" element={<Unauthorized />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={
+            <Navigate to={
+              user && user.userType === 'CLIENT' 
+                ? '/explore' 
+                : user && user.userType === 'VENDOR' 
+                ? '/vendor-dashboard' 
+                : '/dashboard'
+            } replace />
+          } />
         </Routes>
       </Box>
     </Box>

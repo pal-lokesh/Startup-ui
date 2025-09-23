@@ -10,6 +10,19 @@ const apiClient = axios.create({
   },
 });
 
+// Attach JWT to every request
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers = config.headers || {};
+      (config.headers as any).Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Business Service
 export class BusinessService {
   // Create a new business
@@ -62,6 +75,12 @@ export class BusinessService {
   // Get business count
   static async getBusinessCount(): Promise<number> {
     const response = await apiClient.get('/businesses/count');
+    return response.data;
+  }
+
+  // Get all businesses for a vendor by phone number
+  static async getBusinessesByVendorPhoneNumber(phoneNumber: string): Promise<Business[]> {
+    const response = await apiClient.get(`/businesses/vendor/${phoneNumber}`);
     return response.data;
   }
 }

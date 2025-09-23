@@ -76,7 +76,13 @@ const Signup: React.FC = () => {
       setError('');
       setLoading(true);
       await signup(formData);
-      navigate('/dashboard');
+      navigate(
+        formData.userType === 'CLIENT' 
+          ? '/explore' 
+          : formData.userType === 'VENDOR' 
+          ? '/vendor-dashboard' 
+          : '/dashboard'
+      );
     } catch (err: any) {
       setError(err.response?.data?.error || 'Signup failed. Please try again.');
     } finally {

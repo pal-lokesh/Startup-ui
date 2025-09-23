@@ -57,15 +57,35 @@ const Navigation: React.FC = () => {
     handleUserMenuClose();
   };
 
-  const menuItems = [
+  const baseItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
+  ];
+
+  const clientItems = [
+    { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
+  ];
+
+  const vendorItems = [
+    { text: 'My Business', icon: <BusinessIcon />, path: '/vendor-dashboard' },
+    { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
+  ];
+
+  const adminItems = [
     { text: 'Users', icon: <PeopleIcon />, path: '/users' },
     { text: 'Vendors', icon: <BusinessIcon />, path: '/vendors' },
     { text: 'Businesses', icon: <StoreIcon />, path: '/businesses' },
     { text: 'Themes', icon: <PaletteIcon />, path: '/themes' },
     { text: 'Images', icon: <ImageIcon />, path: '/images' },
   ];
+
+  const menuItems = user && (user.role === 'ADMIN' || user.role === 'VENDOR_ADMIN')
+    ? [...baseItems, ...adminItems]
+    : user && user.userType === 'CLIENT'
+    ? clientItems
+    : user && user.userType === 'VENDOR'
+    ? vendorItems
+    : baseItems;
 
   const drawer = (
     <div>

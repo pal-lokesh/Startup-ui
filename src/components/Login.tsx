@@ -21,7 +21,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,7 +36,13 @@ const Login: React.FC = () => {
       setError('');
       setLoading(true);
       await login(phoneNumber, password);
-      navigate('/dashboard');
+      navigate(
+        user && user.userType === 'CLIENT' 
+          ? '/explore' 
+          : user && user.userType === 'VENDOR' 
+          ? '/vendor-dashboard' 
+          : '/dashboard'
+      );
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');
     } finally {

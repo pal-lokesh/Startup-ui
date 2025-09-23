@@ -10,6 +10,19 @@ const apiClient = axios.create({
   },
 });
 
+// Attach JWT to every request
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers = config.headers || {};
+      (config.headers as any).Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Theme Service
 export class ThemeService {
   // Create a new theme
