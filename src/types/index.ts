@@ -87,6 +87,33 @@ export interface Image {
   metadata?: string;
 }
 
+// Inventory Types
+export interface Inventory {
+  inventoryId: string;
+  businessId: string;
+  inventoryName: string;
+  inventoryDescription: string;
+  inventoryCategory: string;
+  price: number;
+  quantity: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventoryImage {
+  imageId: string;
+  inventoryId: string;
+  imageName: string;
+  imageUrl: string;
+  imagePath: string;
+  imageSize: number;
+  imageType: string;
+  isPrimary: boolean;
+  uploadedAt: string;
+  metadata?: string;
+}
+
 // Form Types
 export interface UserFormData {
   firstName: string;
@@ -135,6 +162,26 @@ export interface ImageFormData {
   imagePath: string;
   imageSize: number;
   imageType: string;
+  isPrimary?: boolean;
+}
+
+export interface InventoryFormData {
+  businessId: string;
+  inventoryName: string;
+  inventoryDescription: string;
+  inventoryCategory: string;
+  price: number;
+  quantity: number;
+}
+
+export interface InventoryImageFormData {
+  inventoryId: string;
+  imageName: string;
+  imageUrl: string;
+  imagePath: string;
+  imageSize: number;
+  imageType: string;
+  isPrimary?: boolean;
 }
 
 // Authentication Types
@@ -175,7 +222,7 @@ export interface AuthUser {
 export interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
-  login: (phoneNumber: string, password: string) => Promise<void>;
+  login: (phoneNumber: string, password: string) => Promise<AuthUser>;
   signup: (signupData: SignupRequest) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;

@@ -58,7 +58,6 @@ const Navigation: React.FC = () => {
   };
 
   const baseItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
 
@@ -80,7 +79,7 @@ const Navigation: React.FC = () => {
   ];
 
   const menuItems = user && (user.role === 'ADMIN' || user.role === 'VENDOR_ADMIN')
-    ? [...baseItems, ...adminItems]
+    ? [{ text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' }, ...baseItems, ...adminItems]
     : user && user.userType === 'CLIENT'
     ? clientItems
     : user && user.userType === 'VENDOR'
@@ -173,7 +172,7 @@ const Navigation: React.FC = () => {
                 </MenuItem>
                 <MenuItem disabled>
                   <Typography variant="body2" color="text.secondary">
-                    Role: {user.role}
+                    Role: {user.userType}
                   </Typography>
                 </MenuItem>
                 <Divider />

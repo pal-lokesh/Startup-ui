@@ -35,13 +35,16 @@ const Login: React.FC = () => {
     try {
       setError('');
       setLoading(true);
-      await login(phoneNumber, password);
+      const userData = await login(phoneNumber, password);
+      // Use the returned user data directly for navigation
       navigate(
-        user && user.userType === 'CLIENT' 
+        userData.userType === 'CLIENT' 
           ? '/explore' 
-          : user && user.userType === 'VENDOR' 
+          : userData.userType === 'VENDOR' 
           ? '/vendor-dashboard' 
-          : '/dashboard'
+          : userData.role === 'ADMIN'
+          ? '/dashboard'
+          : '/explore'
       );
     } catch (err: any) {
       setError(err.response?.data?.error || 'Login failed. Please try again.');

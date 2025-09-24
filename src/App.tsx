@@ -72,11 +72,13 @@ const AppContent: React.FC = () => {
                 ? '/explore' 
                 : user && user.userType === 'VENDOR' 
                 ? '/vendor-dashboard' 
-                : '/dashboard'
+                : user && user.role === 'ADMIN'
+                ? '/dashboard'
+                : '/explore'
             } replace />
           } />
           <Route path="/dashboard" element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="ADMIN">
               <Dashboard />
             </ProtectedRoute>
           } />
@@ -86,22 +88,22 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           } />
           <Route path="/users" element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="ADMIN">
               <UserManagement />
             </ProtectedRoute>
           } />
           <Route path="/vendors" element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="ADMIN">
               <VendorManagement />
             </ProtectedRoute>
           } />
           <Route path="/businesses" element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="ADMIN">
               <BusinessManagement />
             </ProtectedRoute>
           } />
           <Route path="/themes" element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="ADMIN">
               <ThemeManagement />
             </ProtectedRoute>
           } />
@@ -122,7 +124,9 @@ const AppContent: React.FC = () => {
                 ? '/explore' 
                 : user && user.userType === 'VENDOR' 
                 ? '/vendor-dashboard' 
-                : '/dashboard'
+                : user && user.role === 'ADMIN'
+                ? '/dashboard'
+                : '/explore'
             } replace />
           } />
         </Routes>

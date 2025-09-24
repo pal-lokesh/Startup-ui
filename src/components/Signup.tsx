@@ -81,7 +81,7 @@ const Signup: React.FC = () => {
           ? '/explore' 
           : formData.userType === 'VENDOR' 
           ? '/vendor-dashboard' 
-          : '/dashboard'
+          : '/explore'
       );
     } catch (err: any) {
       setError(err.response?.data?.error || 'Signup failed. Please try again.');

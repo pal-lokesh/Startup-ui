@@ -29,7 +29,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initializeAuth();
   }, []);
 
-  const login = async (phoneNumber: string, password: string): Promise<void> => {
+  const login = async (phoneNumber: string, password: string): Promise<AuthUser> => {
     try {
       const response = await AuthService.login({ phoneNumber, password });
       const userData: AuthUser = {
@@ -43,6 +43,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       setUser(userData);
       setToken(response.token);
+      return userData;
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
