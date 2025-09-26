@@ -43,6 +43,7 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
     themeCategory: '',
     priceRange: '',
   });
+  const [priceInput, setPriceInput] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
@@ -62,15 +63,6 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
     'Other'
   ];
 
-  const priceRanges = [
-    'Under $500',
-    '$500 - $1,000',
-    '$1,000 - $2,500',
-    '$2,500 - $5,000',
-    '$5,000 - $10,000',
-    'Over $10,000',
-    'Contact for Quote'
-  ];
 
   useEffect(() => {
     if (theme) {
@@ -81,6 +73,9 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
         themeCategory: theme.themeCategory,
         priceRange: theme.priceRange,
       });
+      // Extract numeric value from price range for editing
+      const numericPrice = extractNumericPrice(theme.priceRange);
+      setPriceInput(numericPrice.toString());
     } else {
       setFormData({
         businessId: businessId,
@@ -89,15 +84,57 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
         themeCategory: '',
         priceRange: '',
       });
+      setPriceInput('');
     }
     setError(null);
   }, [theme, businessId, open]);
+
+  const extractNumericPrice = (priceRange: string): number => {
+    if (!priceRange || priceRange === 'Contact for Quote') return 0;
+    
+    // Extract the first number from the price range
+    const match = priceRange.match(/₹?([\d,]+)/);
+    if (match) {
+      return parseFloat(match[1].replace(/,/g, '')) || 0;
+    }
+    return 0;
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  const handlePriceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setPriceInput(value);
+    
+    // Convert numeric input to price range format
+    const numericValue = parseFloat(value) || 0;
+    let priceRange = '';
+    
+    if (numericValue === 0) {
+      priceRange = 'Contact for Quote';
+    } else if (numericValue < 25000) {
+      priceRange = 'Under ₹25,000';
+    } else if (numericValue <= 50000) {
+      priceRange = '₹25,000 - ₹50,000';
+    } else if (numericValue <= 125000) {
+      priceRange = '₹50,000 - ₹1,25,000';
+    } else if (numericValue <= 250000) {
+      priceRange = '₹1,25,000 - ₹2,50,000';
+    } else if (numericValue <= 500000) {
+      priceRange = '₹2,50,000 - ₹5,00,000';
+    } else {
+      priceRange = 'Over ₹5,00,000';
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      priceRange: priceRange,
     }));
   };
 
@@ -182,6 +219,7 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
   const handleClose = () => {
     setUploadedImages([]);
     setImageUploading(false);
+    setPriceInput('');
     setError(null);
     onClose();
   };
@@ -244,21 +282,19 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
               />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth margin="normal" required>
-                <InputLabel>Price Range</InputLabel>
-                <Select
-                  name="priceRange"
-                  value={formData.priceRange}
-                  onChange={handleSelectChange}
-                  label="Price Range"
-                >
-                  {priceRanges.map((range) => (
-                    <MenuItem key={range} value={range}>
-                      {range}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <TextField
+                required
+                fullWidth
+                name="price"
+                label="Price (₹)"
+                type="number"
+                value={priceInput}
+                onChange={handlePriceInputChange}
+                margin="normal"
+                inputProps={{ min: 0, step: 0.01 }}
+                placeholder="Enter price"
+                helperText={formData.priceRange}
+              />
             </Grid>
           </Grid>
 

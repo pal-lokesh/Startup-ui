@@ -228,3 +228,26 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
 }
+
+// Plate Types
+export interface Plate {
+  plateId: string;
+  businessId: string;
+  dishName: string;
+  dishDescription: string;
+  plateImage: string;
+  price: number;
+  dishType: 'veg' | 'non-veg';
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlateFormData {
+  businessId: string;
+  dishName: string;
+  dishDescription: string;
+  plateImage: string;
+  price: number;
+  dishType: 'veg' | 'non-veg';
+}

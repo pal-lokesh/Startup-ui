@@ -28,7 +28,8 @@ import { useAuth } from '../contexts/AuthContext';
 import BusinessService from '../services/businessService';
 import ThemeService from '../services/themeService';
 import InventoryService from '../services/inventoryService';
-import { Business, Theme, Inventory } from '../types';
+import PlateService from '../services/plateService';
+import { Business, Theme, Inventory, Plate } from '../types';
 import BusinessManagementForm from '../components/BusinessManagementForm';
 import ThemeManagement from '../components/ThemeManagement';
 import BusinessSelector from '../components/BusinessSelector';
@@ -36,6 +37,8 @@ import ThemeCard from '../components/ThemeCard';
 import InventoryManagementForm from '../components/InventoryManagementForm';
 import InventoryCard from '../components/InventoryCard';
 import InventoryImages from '../components/InventoryImages';
+import PlateManagementForm from '../components/PlateManagementForm';
+import PlateCard from '../components/PlateCard';
 
 const VendorDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -43,6 +46,7 @@ const VendorDashboard: React.FC = () => {
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
+  const [plates, setPlates] = useState<Plate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
@@ -52,6 +56,8 @@ const VendorDashboard: React.FC = () => {
   const [inventoryImagesOpen, setInventoryImagesOpen] = useState(false);
   const [selectedInventory, setSelectedInventory] = useState<Inventory | null>(null);
   const [inventoryRefreshTrigger, setInventoryRefreshTrigger] = useState(0);
+  const [plateFormOpen, setPlateFormOpen] = useState(false);
+  const [editingPlate, setEditingPlate] = useState<Plate | null>(null);
 
   useEffect(() => {
     const fetchVendorData = async () => {
@@ -71,17 +77,30 @@ const VendorDashboard: React.FC = () => {
         // Auto-select first business if available
         if (businessesData.length > 0) {
           setSelectedBusiness(businessesData[0]);
-          // Get themes and inventory for the first business
-          const [themesData, inventoryData] = await Promise.all([
-            ThemeService.getThemesByBusinessId(businessesData[0].businessId),
-            InventoryService.getInventoryByBusinessId(businessesData[0].businessId)
-          ]);
-          setThemes(themesData);
-          setInventory(inventoryData);
+          const business = businessesData[0];
+          
+          // Fetch data based on business category
+          if (business.businessCategory === 'caters') {
+            // For catering businesses, only fetch plates
+            const platesData = await PlateService.getPlatesByBusinessId(business.businessId);
+            setPlates(platesData);
+            setThemes([]);
+            setInventory([]);
+          } else {
+            // For non-catering businesses, fetch themes and inventory
+            const [themesData, inventoryData] = await Promise.all([
+              ThemeService.getThemesByBusinessId(business.businessId),
+              InventoryService.getInventoryByBusinessId(business.businessId)
+            ]);
+            setThemes(themesData);
+            setInventory(inventoryData);
+            setPlates([]);
+          }
         } else {
           setSelectedBusiness(null);
           setThemes([]);
           setInventory([]);
+          setPlates([]);
         }
         
       } catch (err: any) {
@@ -107,16 +126,28 @@ const VendorDashboard: React.FC = () => {
   const handleBusinessSelect = async (business: Business) => {
     setSelectedBusiness(business);
     try {
-      const [themesData, inventoryData] = await Promise.all([
-        ThemeService.getThemesByBusinessId(business.businessId),
-        InventoryService.getInventoryByBusinessId(business.businessId)
-      ]);
-      setThemes(themesData);
-      setInventory(inventoryData);
+      // Fetch data based on business category
+      if (business.businessCategory === 'caters') {
+        // For catering businesses, only fetch plates
+        const platesData = await PlateService.getPlatesByBusinessId(business.businessId);
+        setPlates(platesData);
+        setThemes([]);
+        setInventory([]);
+      } else {
+        // For non-catering businesses, fetch themes and inventory
+        const [themesData, inventoryData] = await Promise.all([
+          ThemeService.getThemesByBusinessId(business.businessId),
+          InventoryService.getInventoryByBusinessId(business.businessId)
+        ]);
+        setThemes(themesData);
+        setInventory(inventoryData);
+        setPlates([]);
+      }
     } catch (err) {
       console.error('Error fetching business data:', err);
       setThemes([]);
       setInventory([]);
+      setPlates([]);
     }
   };
 
@@ -138,11 +169,28 @@ const VendorDashboard: React.FC = () => {
     if (!selectedBusiness || selectedBusiness.businessId === updatedBusiness.businessId) {
       setSelectedBusiness(updatedBusiness);
       try {
-        const themesData = await ThemeService.getThemesByBusinessId(updatedBusiness.businessId);
-        setThemes(themesData);
+        // Fetch data based on business category
+        if (updatedBusiness.businessCategory === 'caters') {
+          // For catering businesses, only fetch plates
+          const platesData = await PlateService.getPlatesByBusinessId(updatedBusiness.businessId);
+          setPlates(platesData);
+          setThemes([]);
+          setInventory([]);
+        } else {
+          // For non-catering businesses, fetch themes and inventory
+          const [themesData, inventoryData] = await Promise.all([
+            ThemeService.getThemesByBusinessId(updatedBusiness.businessId),
+            InventoryService.getInventoryByBusinessId(updatedBusiness.businessId)
+          ]);
+          setThemes(themesData);
+          setInventory(inventoryData);
+          setPlates([]);
+        }
       } catch (err) {
-        console.error('Error fetching themes after business update:', err);
+        console.error('Error fetching data after business update:', err);
         setThemes([]);
+        setInventory([]);
+        setPlates([]);
       }
     }
   };
@@ -216,6 +264,37 @@ const VendorDashboard: React.FC = () => {
     setInventory(updatedInventory);
   };
 
+  // Plate management handlers
+  const handleAddPlate = () => {
+    setEditingPlate(null);
+    setPlateFormOpen(true);
+  };
+
+  const handleEditPlate = (plate: Plate) => {
+    setEditingPlate(plate);
+    setPlateFormOpen(true);
+  };
+
+  const handlePlateSuccess = async (updatedPlate: Plate) => {
+    setPlateFormOpen(false);
+    setEditingPlate(null);
+    
+    // Update plates list
+    const updatedPlates = plates.some(p => p.plateId === updatedPlate.plateId)
+      ? plates.map(p => p.plateId === updatedPlate.plateId ? updatedPlate : p)
+      : [...plates, updatedPlate];
+    
+    setPlates(updatedPlates);
+  };
+
+  const handlePlateDelete = (plateId: string) => {
+    setPlates(plates.filter(p => p.plateId !== plateId));
+  };
+
+  const handlePlateUpdate = (updatedPlate: Plate) => {
+    setPlates(plates.map(p => p.plateId === updatedPlate.plateId ? updatedPlate : p));
+  };
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
@@ -286,8 +365,9 @@ const VendorDashboard: React.FC = () => {
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
             <Tabs value={activeTab} onChange={handleTabChange}>
               <Tab label="Overview" />
-              <Tab label="Themes" />
-              <Tab label="Inventory" />
+              {selectedBusiness.businessCategory !== 'caters' && <Tab label="Themes" />}
+              {selectedBusiness.businessCategory !== 'caters' && <Tab label="Inventory" />}
+              {selectedBusiness.businessCategory === 'caters' && <Tab label="Plates" />}
             </Tabs>
           </Box>
 
@@ -449,39 +529,74 @@ const VendorDashboard: React.FC = () => {
         </Grid>
       </Grid>
 
-          {/* Themes Section */}
-          <Box sx={{ mt: 4 }}>
-            <Typography variant="h5" gutterBottom>
-              My Themes ({themes.length})
-            </Typography>
-            
-            {themes.length === 0 ? (
-              <Paper sx={{ p: 3, textAlign: 'center' }}>
-                <PaletteIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  No themes created yet
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Start by creating your first theme to showcase your work.
-                </Typography>
-              </Paper>
-            ) : (
-              <Grid container spacing={2}>
-                {themes.map((theme) => (
-                  <Grid item xs={12} sm={6} md={4} key={theme.themeId}>
-                    <ThemeCard
-                      theme={theme}
-                      showActions={false}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            )}
-          </Box>
+          {/* Themes Section - Only show for non-catering businesses */}
+          {selectedBusiness.businessCategory !== 'caters' && (
+            <Box sx={{ mt: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                My Themes ({themes.length})
+              </Typography>
+              
+              {themes.length === 0 ? (
+                <Paper sx={{ p: 3, textAlign: 'center' }}>
+                  <PaletteIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No themes created yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Start by creating your first theme to showcase your work.
+                  </Typography>
+                </Paper>
+              ) : (
+                <Grid container spacing={2}>
+                  {themes.map((theme) => (
+                    <Grid item xs={12} sm={6} md={4} key={theme.themeId}>
+                      <ThemeCard
+                        theme={theme}
+                        showActions={false}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          )}
+
+          {/* Plates Section - Only show for catering businesses */}
+          {selectedBusiness.businessCategory === 'caters' && (
+            <Box sx={{ mt: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                My Plates ({plates.length})
+              </Typography>
+              
+              {plates.length === 0 ? (
+                <Paper sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No plates created yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Start by creating your first plate to showcase your catering dishes.
+                  </Typography>
+                </Paper>
+              ) : (
+                <Grid container spacing={2}>
+                  {plates.map((plate) => (
+                    <Grid item xs={12} sm={6} md={4} key={plate.plateId}>
+                      <PlateCard
+                        plate={plate}
+                        onEdit={handleEditPlate}
+                        onDelete={handlePlateDelete}
+                        onUpdate={handlePlateUpdate}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          )}
         </Box>
       )}
 
-          {activeTab === 1 && selectedBusiness && (
+          {activeTab === 1 && selectedBusiness && selectedBusiness.businessCategory !== 'caters' && (
             <ThemeManagement
               themes={themes}
               businessId={selectedBusiness.businessId}
@@ -489,7 +604,7 @@ const VendorDashboard: React.FC = () => {
             />
           )}
 
-          {activeTab === 2 && selectedBusiness && (
+          {activeTab === 2 && selectedBusiness && selectedBusiness.businessCategory !== 'caters' && (
             <Box>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                 <Typography variant="h5" component="h2">
@@ -537,6 +652,53 @@ const VendorDashboard: React.FC = () => {
               )}
             </Box>
           )}
+
+          {/* Plates Tab - Only show for catering businesses */}
+          {activeTab === 1 && selectedBusiness.businessCategory === 'caters' && (
+            <Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" gutterBottom>
+                  Plate Management
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={handleAddPlate}
+                >
+                  Add New Plate
+                </Button>
+              </Box>
+
+              {plates.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No plates yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Start by adding your first plate to showcase your catering dishes.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    onClick={handleAddPlate}
+                  >
+                    Add First Plate
+                  </Button>
+                </Paper>
+              ) : (
+                <Grid container spacing={3}>
+                  {plates.map((plate) => (
+                    <Grid item xs={12} sm={6} md={4} key={plate.plateId}>
+                      <PlateCard
+                        plate={plate}
+                        onEdit={handleEditPlate}
+                        onDelete={handlePlateDelete}
+                        onUpdate={handlePlateUpdate}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          )}
         </>
       )}
 
@@ -568,6 +730,20 @@ const VendorDashboard: React.FC = () => {
         onClose={handleInventoryImagesClose}
         inventory={selectedInventory}
       />
+
+      {/* Plate Management Form */}
+      {selectedBusiness && (
+        <PlateManagementForm
+          open={plateFormOpen}
+          onClose={() => {
+            setPlateFormOpen(false);
+            setEditingPlate(null);
+          }}
+          plate={editingPlate}
+          businessId={selectedBusiness.businessId}
+          onSuccess={handlePlateSuccess}
+        />
+      )}
     </Box>
   );
 };
