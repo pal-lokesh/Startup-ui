@@ -13,6 +13,7 @@ import BusinessManagement from './pages/BusinessManagement';
 import ThemeManagement from './pages/ThemeManagement';
 import ImageManagement from './pages/ImageManagement';
 import ExploreThemes from './pages/ExploreThemes';
+import ClientExplore from './pages/ClientExploreNew';
 import Unauthorized from './pages/Unauthorized';
 
 // Components
@@ -109,7 +110,7 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/explore" element={
             <ProtectedRoute>
-              <ExploreThemes />
+              <ClientExplore />
             </ProtectedRoute>
           } />
           <Route path="/images" element={

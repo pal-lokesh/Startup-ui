@@ -83,6 +83,16 @@ export class BusinessService {
     const response = await apiClient.get(`/businesses/vendor/${phoneNumber}`);
     return response.data;
   }
+
+  // Get business with themes and inventory
+  static async getBusinessWithDetails(businessId: string): Promise<{
+    business: Business;
+    themes: any[];
+    inventory: any[];
+  }> {
+    const response = await apiClient.get(`/businesses/${businessId}/details`);
+    return response.data;
+  }
 }
 
 export default BusinessService;

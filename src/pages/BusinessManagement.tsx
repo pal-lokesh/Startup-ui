@@ -13,15 +13,25 @@ import {
   Chip,
   CircularProgress,
   Alert,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
-import { Add as AddIcon } from '@mui/icons-material';
+import { 
+  Add as AddIcon, 
+  Visibility as ViewIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon
+} from '@mui/icons-material';
 import { Business } from '../types';
 import BusinessService from '../services/businessService';
+import BusinessDetail from '../components/BusinessDetail';
 
 const BusinessManagement: React.FC = () => {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
 
   useEffect(() => {
     fetchBusinesses();
@@ -38,6 +48,16 @@ const BusinessManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewBusiness = (business: Business) => {
+    setSelectedBusiness(business);
+    setShowDetail(true);
+  };
+
+  const handleCloseDetail = () => {
+    setShowDetail(false);
+    setSelectedBusiness(null);
   };
 
   if (loading) {
@@ -75,6 +95,7 @@ const BusinessManagement: React.FC = () => {
               <TableCell>Email</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Created</TableCell>
+              <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -94,11 +115,42 @@ const BusinessManagement: React.FC = () => {
                 <TableCell>
                   {new Date(business.createdAt).toLocaleDateString()}
                 </TableCell>
+                <TableCell>
+                  <Box display="flex" gap={1}>
+                    <Tooltip title="View Details">
+                      <IconButton 
+                        size="small" 
+                        color="primary"
+                        onClick={() => handleViewBusiness(business)}
+                      >
+                        <ViewIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit">
+                      <IconButton size="small" color="secondary">
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton size="small" color="error">
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Business Detail Dialog */}
+      {showDetail && selectedBusiness && (
+        <BusinessDetail
+          business={selectedBusiness}
+          onClose={handleCloseDetail}
+        />
+      )}
     </Box>
   );
 };

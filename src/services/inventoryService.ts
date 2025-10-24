@@ -40,6 +40,11 @@ class InventoryService {
     return response.data;
   }
 
+  static async getAllInventory(): Promise<Inventory[]> {
+    const response = await apiClient.get('/inventory');
+    return response.data;
+  }
+
   static async updateInventory(inventoryId: string, inventoryData: Partial<InventoryFormData>): Promise<Inventory> {
     const response = await apiClient.put(`/inventory/${inventoryId}`, inventoryData);
     return response.data;
