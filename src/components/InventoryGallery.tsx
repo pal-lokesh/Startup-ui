@@ -93,7 +93,7 @@ const InventoryGallery: React.FC<InventoryGalleryProps> = ({ inventory, open, on
           </Typography>
           <Box display="flex" gap={1} mb={2}>
             <Chip label={inventory.inventoryCategory} size="small" />
-            <Chip label={`$${inventory.price}`} size="small" color="primary" />
+            <Chip label={`₹${inventory.price}`} size="small" color="primary" />
             <Chip label={`Qty: ${inventory.quantity}`} size="small" color="secondary" />
             <Chip 
               label={inventory.isActive ? 'Active' : 'Inactive'} 

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Card,
   CardContent,
-  CardMedia,
   Typography,
   Box,
   Button,
@@ -23,6 +22,7 @@ import {
 } from '@mui/icons-material';
 import { Plate } from '../types';
 import PlateService from '../services/plateService';
+import ImageCarousel from './ImageCarousel';
 
 interface PlateCardProps {
   plate: Plate;
@@ -98,12 +98,15 @@ const PlateCard: React.FC<PlateCardProps> = ({
     <>
       <Card sx={{ maxWidth: 345, height: '100%', display: 'flex', flexDirection: 'column' }}>
         {plate.plateImage && (
-          <CardMedia
-            component="img"
-            height="200"
-            image={plate.plateImage}
-            alt={plate.dishName}
-            sx={{ objectFit: 'cover' }}
+          <ImageCarousel
+            images={[{
+              imageId: plate.plateId,
+              imageUrl: plate.plateImage,
+              imageName: plate.dishName
+            }]}
+            height={200}
+            showNavigation={false}
+            showDots={false}
           />
         )}
         <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>

@@ -126,6 +126,12 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
       return;
     }
 
+    // Check if image is uploaded for new plates
+    if (!plate && !uploadedImage) {
+      setError('Please upload an image for the plate');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -251,10 +257,10 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
             <>
               <Divider sx={{ my: 3 }} />
               <Typography variant="h6" gutterBottom>
-                Upload Plate Image (Optional)
+                Upload Plate Image <span style={{ color: 'red' }}>*</span>
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                You can add an image of the plate now or upload it later.
+                An image is required for the plate.
               </Typography>
               
               <Box sx={{ mb: 2 }}>

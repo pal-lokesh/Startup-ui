@@ -193,6 +193,12 @@ const InventoryManagementForm: React.FC<InventoryManagementFormProps> = ({
       return;
     }
 
+    // Check if images are uploaded for new inventory
+    if (!inventory && uploadedImages.length === 0) {
+      setError('Please upload at least one image for the inventory');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -372,10 +378,10 @@ const InventoryManagementForm: React.FC<InventoryManagementFormProps> = ({
             <>
               <Divider sx={{ my: 3 }} />
               <Typography variant="h6" gutterBottom>
-                Upload Images (Optional)
+                Upload Images <span style={{ color: 'red' }}>*</span>
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                You can add images now or upload them later from the inventory management section.
+                At least one image is required for the inventory item.
               </Typography>
               
               <Box sx={{ mb: 2 }}>

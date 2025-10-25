@@ -51,8 +51,6 @@ interface TabPanelProps {
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
   
-  console.log(`TabPanel ${index}:`, { value, index, shouldShow: value === index });
-  
   return (
     <div
       role="tabpanel"
@@ -148,12 +146,6 @@ const ClientExplore: React.FC = () => {
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    console.log('Tab Change:', { 
-      from: activeTab, 
-      to: newValue, 
-      category: selectedCategory,
-      event: event.type 
-    });
     setActiveTab(newValue);
     setRefreshKey(Date.now());
   };
@@ -297,13 +289,6 @@ const ClientExplore: React.FC = () => {
         </Box>
       </Paper>
 
-      {/* Debug Info */}
-      <Box sx={{ mb: 2, p: 2, backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 1 }}>
-        <Typography variant="body2" color="primary">
-          Debug: Category: {selectedCategory} | Active Tab: {activeTab} | 
-          Tab Structure: {selectedCategory === 'catering' ? '1 tab (Plates)' : '3 tabs (Themes, Inventory, Plates)'}
-        </Typography>
-      </Box>
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 3 }}>
@@ -324,11 +309,6 @@ const ClientExplore: React.FC = () => {
               <Tab
                 icon={<InventoryIcon />}
                 label={`Inventory (${inventory.length})`}
-                iconPosition="start"
-              />
-              <Tab
-                icon={<CateringIcon />}
-                label={`Plates (${plates.length})`}
                 iconPosition="start"
               />
             </>
@@ -507,9 +487,6 @@ const ClientExplore: React.FC = () => {
               <Typography variant="body2" color="text.secondary">
                 Check back later for new products
               </Typography>
-              <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-                Debug: Total inventory items: {inventory.length}, Filtered businesses: {filteredBusinesses.length}
-              </Typography>
             </Box>
           )}
         </TabPanel>
@@ -656,7 +633,7 @@ const ClientExplore: React.FC = () => {
           </Fade>
         </TabPanel>
       )}
-      
+
       {/* Plates Tab - For non-catering categories */}
       {selectedCategory !== 'catering' && (
         <TabPanel value={activeTab} index={2} key={`plates-${selectedCategory}-${refreshKey}`}>
@@ -792,7 +769,6 @@ const ClientExplore: React.FC = () => {
           </Fade>
         </TabPanel>
       )}
-
 
       {/* Business Detail Dialog */}
       {selectedBusiness && (
@@ -1128,7 +1104,7 @@ const InventoryCard: React.FC<{ inventory: Inventory }> = ({ inventory }) => {
         <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
           <Chip label={inventory.inventoryCategory} size="small" />
           <Typography variant="h6" color="primary">
-            ${inventory.price}
+            ₹{inventory.price}
           </Typography>
         </Box>
         <Box display="flex" justifyContent="space-between" alignItems="center" mt={1}>
@@ -1266,7 +1242,7 @@ const PlateCard: React.FC<{ plate: Plate }> = ({ plate }) => {
             color={plate.dishType === 'veg' ? 'success' : 'error'}
           />
           <Typography variant="h6" color="primary">
-            ${plate.price}
+            ₹{plate.price}
           </Typography>
         </Box>
         <Button variant="outlined" size="small" fullWidth sx={{ mt: 1 }}>

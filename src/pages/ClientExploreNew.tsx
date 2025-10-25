@@ -447,6 +447,7 @@ const ClientExplore: React.FC = () => {
                     </Box>
                   )}
 
+
                   {/* No content message */}
                   {activeTab === 0 && businessThemesList.length === 0 && (
                     <Box textAlign="center" py={4}>
@@ -469,6 +470,7 @@ const ClientExplore: React.FC = () => {
                       </Typography>
                     </Box>
                   )}
+
                 </Box>
               </Slide>
             );

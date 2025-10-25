@@ -166,6 +166,12 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
       return;
     }
 
+    // Check if images are uploaded for new themes
+    if (!theme && uploadedImages.length === 0) {
+      setError('Please upload at least one image for the theme');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -303,10 +309,10 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
             <>
               <Divider sx={{ my: 3 }} />
               <Typography variant="h6" gutterBottom>
-                Upload Images (Optional)
+                Upload Images <span style={{ color: 'red' }}>*</span>
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                You can add images now or upload them later from the theme management section.
+                At least one image is required for the theme.
               </Typography>
               
               <Box sx={{ mb: 2 }}>

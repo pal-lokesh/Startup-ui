@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
-  CardMedia,
   Typography,
   Box,
   Chip,
@@ -17,6 +16,7 @@ import {
 } from '@mui/icons-material';
 import { Theme, Image } from '../types';
 import ImageService from '../services/imageService';
+import ImageCarousel from './ImageCarousel';
 
 interface ThemeCardProps {
   theme: Theme;
@@ -68,13 +68,13 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
       }}
     >
       {/* Images Section */}
-      <Box sx={{ height: 200, position: 'relative' }}>
+      <Box sx={{ position: 'relative' }}>
         {loading ? (
           <Box 
             display="flex" 
             justifyContent="center" 
             alignItems="center" 
-            height="100%"
+            height="200"
             bgcolor="grey.100"
           >
             <CircularProgress size={40} />
@@ -84,7 +84,7 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
             display="flex" 
             justifyContent="center" 
             alignItems="center" 
-            height="100%"
+            height="200"
             bgcolor="grey.100"
             flexDirection="column"
           >
@@ -93,102 +93,18 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
               Failed to load images
             </Typography>
           </Box>
-        ) : images.length === 0 ? (
-          <Box 
-            display="flex" 
-            justifyContent="center" 
-            alignItems="center" 
-            height="100%"
-            bgcolor="grey.100"
-            flexDirection="column"
-          >
-            <ImageIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-            <Typography variant="caption" color="text.secondary">
-              No images uploaded
-            </Typography>
-          </Box>
-        ) : images.length === 1 ? (
-          <CardMedia
-            component="img"
-            height="200"
-            image={images[0].imageUrl}
-            alt={images[0].imageName}
-            sx={{ objectFit: 'cover' }}
-          />
         ) : (
-          <Box sx={{ height: '100%', display: 'flex', overflow: 'hidden' }}>
-            {/* Main image (first image or primary) */}
-            <Box sx={{ flex: 1, position: 'relative' }}>
-              <CardMedia
-                component="img"
-                height="200"
-                image={images[0].imageUrl}
-                alt={images[0].imageName}
-                sx={{ objectFit: 'cover', width: '100%' }}
-              />
-              {/* Image count overlay */}
-              <Box 
-                sx={{ 
-                  position: 'absolute', 
-                  bottom: 8, 
-                  right: 8,
-                  bgcolor: 'rgba(0,0,0,0.7)',
-                  color: 'white',
-                  px: 1,
-                  py: 0.5,
-                  borderRadius: 1,
-                  fontSize: '0.75rem'
-                }}
-              >
-                +{images.length - 1} more
-              </Box>
-            </Box>
-            
-            {/* Thumbnail strip for additional images */}
-            {images.length > 1 && (
-              <Box sx={{ width: 60, display: 'flex', flexDirection: 'column' }}>
-                {images.slice(1, 4).map((image, index) => (
-                  <Box key={image.imageId} sx={{ flex: 1, position: 'relative' }}>
-                    <CardMedia
-                      component="img"
-                      image={image.imageUrl}
-                      alt={image.imageName}
-                      sx={{ 
-                        objectFit: 'cover', 
-                        width: '100%', 
-                        height: '100%',
-                        borderLeft: '2px solid white'
-                      }}
-                    />
-                    {index === 2 && images.length > 4 && (
-                      <Box 
-                        sx={{ 
-                          position: 'absolute', 
-                          top: 0, 
-                          left: 0, 
-                          right: 0, 
-                          bottom: 0,
-                          bgcolor: 'rgba(0,0,0,0.6)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'white',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        +{images.length - 4}
-                      </Box>
-                    )}
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
+          <ImageCarousel
+            images={images}
+            height={200}
+            showNavigation={true}
+            showDots={true}
+            onImageClick={() => onViewImages?.(theme)}
+          />
         )}
         
         {/* Status Chip */}
-        <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 3 }}>
           <Chip 
             label={theme.isActive ? 'Active' : 'Inactive'} 
             color={theme.isActive ? 'success' : 'default'}

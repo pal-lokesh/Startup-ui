@@ -266,6 +266,7 @@ const BusinessDetail: React.FC<BusinessDetailProps> = ({ business, onClose }) =>
           </Grid>
         </TabPanel>
 
+
         {/* Gallery Dialogs */}
         {selectedTheme && (
           <ThemeGallery
@@ -478,7 +479,7 @@ const InventoryCard: React.FC<{ inventory: Inventory; onClick?: () => void }> = 
         <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
           <Chip label={inventory.inventoryCategory} size="small" />
           <Typography variant="h6" color="primary">
-            ${inventory.price}
+            ₹{inventory.price}
           </Typography>
         </Box>
         <Box display="flex" justifyContent="space-between" alignItems="center" mt={1}>
