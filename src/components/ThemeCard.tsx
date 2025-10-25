@@ -7,35 +7,49 @@ import {
   Chip,
   IconButton,
   CircularProgress,
+  Button,
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Visibility as ViewIcon,
   Image as ImageIcon,
+  ShoppingCart as CartIcon,
+  Add as AddIcon,
+  FlashOn as BuyNowIcon,
 } from '@mui/icons-material';
-import { Theme, Image } from '../types';
+import { Theme, Image, Business } from '../types';
 import ImageService from '../services/imageService';
 import ImageCarousel from './ImageCarousel';
+import { useCart } from '../contexts/CartContext';
 
 interface ThemeCardProps {
   theme: Theme;
+  business?: Business;
   onEdit?: (theme: Theme) => void;
   onDelete?: (theme: Theme) => void;
   onViewImages?: (theme: Theme) => void;
+  onBuyNow?: (theme: Theme, business: Business) => void;
   showActions?: boolean;
+  showCartButton?: boolean;
+  showBuyNowButton?: boolean;
 }
 
 const ThemeCard: React.FC<ThemeCardProps> = ({
   theme,
+  business,
   onEdit,
   onDelete,
   onViewImages,
+  onBuyNow,
   showActions = true,
+  showCartButton = true,
+  showBuyNowButton = true,
 }) => {
   const [images, setImages] = useState<Image[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { addToCart, isInCart } = useCart();
 
   useEffect(() => {
     fetchAllImages();
@@ -136,8 +150,41 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
       </CardContent>
       
       {/* Actions Section */}
-      {showActions && (
-        <Box sx={{ p: 2, pt: 0 }}>
+      <Box sx={{ p: 2, pt: 0 }}>
+        {/* Cart and Buy Now Buttons */}
+        {business && (showCartButton || showBuyNowButton) && (
+          <Box sx={{ mb: 2 }}>
+            <Box display="flex" gap={1} mb={1}>
+              {showCartButton && (
+                <Button
+                  variant={isInCart(theme.themeId, 'theme') ? "contained" : "outlined"}
+                  color={isInCart(theme.themeId, 'theme') ? "success" : "primary"}
+                  size="small"
+                  startIcon={<CartIcon />}
+                  onClick={() => addToCart(theme, business)}
+                  fullWidth
+                >
+                  {isInCart(theme.themeId, 'theme') ? "In Cart" : "Add to Cart"}
+                </Button>
+              )}
+              {showBuyNowButton && (
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  size="small"
+                  startIcon={<BuyNowIcon />}
+                  onClick={() => onBuyNow && onBuyNow(theme, business)}
+                  fullWidth
+                >
+                  Buy Now
+                </Button>
+              )}
+            </Box>
+          </Box>
+        )}
+
+        {/* Admin Actions */}
+        {showActions && (
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Typography variant="caption" color="text.secondary">
               Created: {new Date(theme.createdAt).toLocaleDateString()}
@@ -175,8 +222,8 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
               )}
             </Box>
           </Box>
-        </Box>
-      )}
+        )}
+      </Box>
     </Card>
   );
 };

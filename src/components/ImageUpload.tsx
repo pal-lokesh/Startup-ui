@@ -106,27 +106,42 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
 
     try {
       const uploadPromises = selectedFiles.map(async (file, index) => {
-        // Convert file to base64 for storage
-        const dataUrl = await convertToBase64(file);
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('category', uploadType === 'inventory' ? 'inventory' : 'themes');
+        formData.append('itemId', themeId);
+
+        // Upload file to backend
+        const uploadResponse = await fetch('http://localhost:8080/api/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error('File upload failed');
+        }
+
+        const uploadResult = await uploadResponse.json();
         
         if (uploadType === 'inventory') {
           const imageData = {
-            inventoryId: themeId, // Using themeId as inventoryId for consistency
+            inventoryId: themeId,
             imageName: file.name,
-            imageUrl: dataUrl,
-            imagePath: `/uploads/inventory/${themeId}/${file.name}`,
+            imageUrl: `http://localhost:8080${uploadResult.filePath}`,
+            imagePath: uploadResult.filePath,
             imageSize: file.size,
             imageType: file.type,
           };
 
-          console.log('Preparing to upload inventory image:', imageData);
+          console.log('Preparing to save inventory image:', imageData);
           return await InventoryService.createInventoryImage(imageData);
         } else {
           const imageData = {
             themeId,
             imageName: file.name,
-            imageUrl: dataUrl,
-            imagePath: `/uploads/${themeId}/${file.name}`,
+            imageUrl: `http://localhost:8080${uploadResult.filePath}`,
+            imagePath: uploadResult.filePath,
             imageSize: file.size,
             imageType: file.type,
           };

@@ -30,6 +30,7 @@ import ThemeService from '../services/themeService';
 import InventoryService from '../services/inventoryService';
 import PlateService from '../services/plateService';
 import { Business, Theme, Inventory, Plate } from '../types';
+import { Order } from '../types/cart';
 import BusinessManagementForm from '../components/BusinessManagementForm';
 import ThemeManagement from '../components/ThemeManagement';
 import BusinessSelector from '../components/BusinessSelector';
@@ -39,6 +40,8 @@ import InventoryCard from '../components/InventoryCard';
 import InventoryImages from '../components/InventoryImages';
 import PlateManagementForm from '../components/PlateManagementForm';
 import PlateCard from '../components/PlateCard';
+import orderService from '../services/orderService';
+import notificationService from '../services/notificationService';
 
 const VendorDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -58,6 +61,14 @@ const VendorDashboard: React.FC = () => {
   const [inventoryRefreshTrigger, setInventoryRefreshTrigger] = useState(0);
   const [plateFormOpen, setPlateFormOpen] = useState(false);
   const [editingPlate, setEditingPlate] = useState<Plate | null>(null);
+  
+  // Order management state
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  
+  // Notification state
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   useEffect(() => {
     const fetchVendorData = async () => {
@@ -121,6 +132,11 @@ const VendorDashboard: React.FC = () => {
     };
 
     fetchVendorData();
+    
+    // Fetch notification count
+    if (user?.phoneNumber) {
+      fetchNotificationCount();
+    }
   }, [user?.phoneNumber]);
 
   const handleBusinessSelect = async (business: Business) => {
@@ -295,8 +311,66 @@ const VendorDashboard: React.FC = () => {
     setPlates(plates.map(p => p.plateId === updatedPlate.plateId ? updatedPlate : p));
   };
 
+  const fetchNotificationCount = async () => {
+    if (!user?.phoneNumber) return;
+    
+    try {
+      const count = await notificationService.getNotificationCount(user.phoneNumber);
+      setUnreadNotificationCount(count);
+    } catch (err: any) {
+      console.error('Error fetching notification count:', err);
+    }
+  };
+
+  // Helper function to get the correct Orders tab index
+  const getOrdersTabIndex = () => {
+    if (!selectedBusiness) return -1;
+    let index = 1; // Start after Overview tab
+    if (selectedBusiness.businessCategory !== 'caters') {
+      index += 2; // Themes + Inventory tabs
+    } else {
+      index += 1; // Plates tab only
+    }
+    return index;
+  };
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
+    
+    // Fetch orders when Orders tab is selected
+    if (newValue === getOrdersTabIndex() && selectedBusiness) {
+      fetchOrdersForBusiness();
+      fetchNotificationCount(); // Also fetch notification count
+    }
+  };
+
+  const fetchOrdersForBusiness = async () => {
+    if (!selectedBusiness) return;
+    
+    try {
+      setOrdersLoading(true);
+      setOrdersError(null);
+      console.log('Fetching orders for business:', selectedBusiness.businessId);
+      const ordersData = await orderService.getOrdersByBusinessId(selectedBusiness.businessId);
+      console.log('Orders fetched:', ordersData);
+      setOrders(ordersData);
+    } catch (err: any) {
+      console.error('Error fetching orders:', err);
+      setOrdersError(err.message || 'Failed to fetch orders');
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const handleOrderStatusUpdate = async (orderId: string, newStatus: Order['status']) => {
+    try {
+      await orderService.updateOrderStatus(orderId, newStatus);
+      // Refresh orders after status update
+      await fetchOrdersForBusiness();
+    } catch (err: any) {
+      console.error('Error updating order status:', err);
+      setOrdersError(err.message || 'Failed to update order status');
+    }
   };
 
   if (loading) {
@@ -368,6 +442,13 @@ const VendorDashboard: React.FC = () => {
               {selectedBusiness.businessCategory !== 'caters' && <Tab label="Themes" />}
               {selectedBusiness.businessCategory !== 'caters' && <Tab label="Inventory" />}
               {selectedBusiness.businessCategory === 'caters' && <Tab label="Plates" />}
+              <Tab 
+                label={
+                  unreadNotificationCount > 0 
+                    ? `Orders (${unreadNotificationCount})` 
+                    : "Orders"
+                } 
+              />
             </Tabs>
           </Box>
 
@@ -699,6 +780,227 @@ const VendorDashboard: React.FC = () => {
               )}
             </Box>
           )}
+
+          {/* Orders Tab */}
+          {activeTab === getOrdersTabIndex() && selectedBusiness && (
+            <Box>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="h5" component="h2">
+                  Orders for {selectedBusiness.businessName}
+                  {unreadNotificationCount > 0 && (
+                    <Chip 
+                      label={`${unreadNotificationCount} New`} 
+                      color="primary" 
+                      size="small" 
+                      sx={{ ml: 2 }}
+                    />
+                  )}
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  onClick={fetchOrdersForBusiness}
+                  disabled={ordersLoading}
+                >
+                  Refresh Orders
+                </Button>
+              </Box>
+
+              {/* Notification Banner */}
+              {unreadNotificationCount > 0 && (
+                <Alert 
+                  severity="info" 
+                  sx={{ mb: 2 }}
+                  action={
+                    <Button 
+                      color="inherit" 
+                      size="small" 
+                      onClick={() => {
+                        // Mark all notifications as read
+                        if (user?.phoneNumber) {
+                          notificationService.markAllAsRead(user.phoneNumber);
+                          fetchNotificationCount();
+                        }
+                      }}
+                    >
+                      Mark All Read
+                    </Button>
+                  }
+                >
+                  You have {unreadNotificationCount} unread order notification{unreadNotificationCount > 1 ? 's' : ''}!
+                </Alert>
+              )}
+
+              {ordersError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError(null)}>
+                  {ordersError}
+                </Alert>
+              )}
+
+              {ordersLoading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                  <CircularProgress />
+                </Box>
+              ) : orders.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No orders yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Orders from customers will appear here once they place them.
+                  </Typography>
+                </Paper>
+              ) : (
+                <Grid container spacing={3}>
+                  {orders.map((order) => (
+                    <Grid item xs={12} key={order.orderId}>
+                      <Card>
+                        <CardContent>
+                          <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
+                            <Box>
+                              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                                <Typography variant="h6">
+                                  Order #{order.orderId}
+                                </Typography>
+                                {/* Show NEW indicator for recent orders (within last 24 hours) */}
+                                {new Date(order.orderDate).getTime() > Date.now() - 24 * 60 * 60 * 1000 && (
+                                  <Chip 
+                                    label="NEW" 
+                                    color="primary" 
+                                    size="small"
+                                    sx={{ fontWeight: 'bold' }}
+                                  />
+                                )}
+                              </Box>
+                              <Typography variant="body2" color="text.secondary">
+                                Customer: {order.customerName}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Email: {order.customerEmail}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Phone: {order.customerPhone}
+                              </Typography>
+                            </Box>
+                            <Box textAlign="right">
+                              <Chip 
+                                label={order.status} 
+                                color={
+                                  order.status === 'PENDING' ? 'warning' :
+                                  order.status === 'CONFIRMED' ? 'info' :
+                                  order.status === 'PREPARING' ? 'primary' :
+                                  order.status === 'READY' ? 'success' :
+                                  order.status === 'DELIVERED' ? 'success' :
+                                  'error'
+                                }
+                                sx={{ mb: 1 }}
+                              />
+                              <Typography variant="h6" color="primary">
+                                ₹{order.totalAmount}
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          <Divider sx={{ my: 2 }} />
+
+                          <Typography variant="subtitle2" gutterBottom>
+                            Order Items:
+                          </Typography>
+                          {order.orderItems.map((item, index) => (
+                            <Box key={index} display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                              <Box>
+                                <Typography variant="body2">
+                                  {item.itemName} ({item.itemType})
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Qty: {item.quantity} × ₹{item.itemPrice}
+                                </Typography>
+                              </Box>
+                              <Typography variant="body2" fontWeight="bold">
+                                ₹{item.itemPrice * item.quantity}
+                              </Typography>
+                            </Box>
+                          ))}
+
+                          <Divider sx={{ my: 2 }} />
+
+                          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                            <Box>
+                              <Typography variant="body2" color="text.secondary">
+                                Order Date: {new Date(order.orderDate).toLocaleString()}
+                              </Typography>
+                              {order.deliveryDate && (
+                                <Typography variant="body2" color="text.secondary">
+                                  Delivery Date: {new Date(order.deliveryDate).toLocaleDateString()}
+                                </Typography>
+                              )}
+                              {order.specialNotes && (
+                                <Typography variant="body2" color="text.secondary">
+                                  Notes: {order.specialNotes}
+                                </Typography>
+                              )}
+                            </Box>
+                            <Box display="flex" gap={1}>
+                              {order.status === 'PENDING' && (
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  size="small"
+                                  onClick={() => handleOrderStatusUpdate(order.orderId.toString(), 'CONFIRMED')}
+                                >
+                                  Confirm Order
+                                </Button>
+                              )}
+                              {order.status === 'CONFIRMED' && (
+                                <Button
+                                  variant="contained"
+                                  color="primary"
+                                  size="small"
+                                  onClick={() => handleOrderStatusUpdate(order.orderId.toString(), 'PREPARING')}
+                                >
+                                  Start Preparing
+                                </Button>
+                              )}
+                              {order.status === 'PREPARING' && (
+                                <Button
+                                  variant="contained"
+                                  color="info"
+                                  size="small"
+                                  onClick={() => handleOrderStatusUpdate(order.orderId.toString(), 'READY')}
+                                >
+                                  Mark Ready
+                                </Button>
+                              )}
+                              {order.status === 'READY' && (
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  size="small"
+                                  onClick={() => handleOrderStatusUpdate(order.orderId.toString(), 'DELIVERED')}
+                                >
+                                  Mark Delivered
+                                </Button>
+                              )}
+                              {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
+                                <Button
+                                  variant="outlined"
+                                  color="error"
+                                  size="small"
+                                  onClick={() => handleOrderStatusUpdate(order.orderId.toString(), 'CANCELLED')}
+                                >
+                                  Cancel
+                                </Button>
+                              )}
+                            </Box>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          )}
+
         </>
       )}
 

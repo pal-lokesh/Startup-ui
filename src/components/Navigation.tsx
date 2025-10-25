@@ -27,8 +27,12 @@ import {
   Menu as MenuIcon,
   AccountCircle,
   Logout,
+  ShoppingCart as CartIcon,
+  Explore as ExploreIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { useCart } from '../contexts/CartContext';
+import Cart from './Cart';
 
 const drawerWidth = 240;
 
@@ -36,6 +40,8 @@ const Navigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { getCartItemCount } = useCart();
+  const [cartOpen, setCartOpen] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
 
@@ -62,6 +68,7 @@ const Navigation: React.FC = () => {
   ];
 
   const clientItems = [
+    { text: 'My Orders', icon: <DashboardIcon />, path: '/client-dashboard' },
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
 
@@ -134,6 +141,34 @@ const Navigation: React.FC = () => {
           </Typography>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <IconButton
+                color="inherit"
+                onClick={() => setCartOpen(true)}
+                sx={{ mr: 1 }}
+              >
+                <CartIcon />
+                {getCartItemCount() > 0 && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      backgroundColor: 'error.main',
+                      color: 'white',
+                      borderRadius: '50%',
+                      width: 20,
+                      height: 20,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {getCartItemCount()}
+                  </Box>
+                )}
+              </IconButton>
               <Typography variant="body2" sx={{ mr: 2 }}>
                 Welcome, {user.firstName}
               </Typography>
@@ -216,6 +251,7 @@ const Navigation: React.FC = () => {
           {drawer}
         </Drawer>
       </Box>
+      <Cart open={cartOpen} onClose={() => setCartOpen(false)} />
     </>
   );
 };

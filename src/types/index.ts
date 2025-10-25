@@ -202,6 +202,7 @@ export interface SignupRequest {
 export interface JwtResponse {
   token: string;
   type: string;
+  userId?: string;
   phoneNumber: string;
   email: string;
   firstName: string;
@@ -211,6 +212,7 @@ export interface JwtResponse {
 }
 
 export interface AuthUser {
+  userId?: string;
   phoneNumber: string;
   email: string;
   firstName: string;

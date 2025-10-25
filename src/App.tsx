@@ -14,6 +14,7 @@ import ThemeManagement from './pages/ThemeManagement';
 import ImageManagement from './pages/ImageManagement';
 import ExploreThemes from './pages/ExploreThemes';
 import ClientExplore from './pages/ClientExploreNew';
+import ClientDashboard from './pages/ClientDashboard';
 import Unauthorized from './pages/Unauthorized';
 
 // Components
@@ -24,6 +25,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 
 // Context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -113,6 +115,11 @@ const AppContent: React.FC = () => {
               <ClientExplore />
             </ProtectedRoute>
           } />
+          <Route path="/client-dashboard" element={
+            <ProtectedRoute>
+              <ClientDashboard />
+            </ProtectedRoute>
+          } />
           <Route path="/images" element={
             <ProtectedRoute>
               <ImageManagement />
@@ -141,9 +148,11 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <CartProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </CartProvider>
       </AuthProvider>
     </ThemeProvider>
   );

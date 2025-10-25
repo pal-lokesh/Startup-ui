@@ -9,6 +9,7 @@ import {
   CircularProgress,
   Tooltip,
   TextField,
+  Button,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -18,35 +19,48 @@ import {
   AttachMoney as PriceIcon,
   Check as CheckIcon,
   Close as CloseIcon,
+  ShoppingCart as CartIcon,
+  Add as AddIcon,
+  FlashOn as BuyNowIcon,
 } from '@mui/icons-material';
-import { Inventory, InventoryImage } from '../types';
+import { Inventory, InventoryImage, Business } from '../types';
 import InventoryService from '../services/inventoryService';
 import ImageCarousel from './ImageCarousel';
+import { useCart } from '../contexts/CartContext';
 
 interface InventoryCardProps {
   inventory: Inventory;
+  business?: Business;
   onEdit?: (inventory: Inventory) => void;
   onDelete?: (inventoryId: string) => void;
   onViewImages?: (inventory: Inventory) => void;
   onPriceUpdate?: (inventoryId: string, newPrice: number) => void;
+  onBuyNow?: (inventory: Inventory, business: Business) => void;
   showActions?: boolean;
+  showCartButton?: boolean;
+  showBuyNowButton?: boolean;
   refreshTrigger?: number; // Add this to trigger image refresh
 }
 
 const InventoryCard: React.FC<InventoryCardProps> = ({
   inventory,
+  business,
   onEdit,
   onDelete,
   onViewImages,
   onPriceUpdate,
+  onBuyNow,
   showActions = true,
+  showCartButton = true,
+  showBuyNowButton = true,
   refreshTrigger,
 }) => {
   const [images, setImages] = useState<InventoryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditingPrice, setIsEditingPrice] = useState(false);
-  const [editPrice, setEditPrice] = useState(inventory.price);
+  const [editPrice, setEditPrice] = useState<number>(inventory.price);
+  const { addToCart, isInCart } = useCart();
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
 
   useEffect(() => {
@@ -276,7 +290,39 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           </Box>
         </Box>
 
-        {/* Action Buttons */}
+        {/* Cart and Buy Now Buttons */}
+        {business && (showCartButton || showBuyNowButton) && (
+          <Box sx={{ mb: 2 }}>
+            <Box display="flex" gap={1} mb={1}>
+              {showCartButton && (
+                <Button
+                  variant={isInCart(inventory.inventoryId, 'inventory') ? "contained" : "outlined"}
+                  color={isInCart(inventory.inventoryId, 'inventory') ? "success" : "primary"}
+                  size="small"
+                  startIcon={<CartIcon />}
+                  onClick={() => addToCart(inventory, business)}
+                  fullWidth
+                >
+                  {isInCart(inventory.inventoryId, 'inventory') ? "In Cart" : "Add to Cart"}
+                </Button>
+              )}
+              {showBuyNowButton && (
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  size="small"
+                  startIcon={<BuyNowIcon />}
+                  onClick={() => onBuyNow && onBuyNow(inventory, business)}
+                  fullWidth
+                >
+                  Buy Now
+                </Button>
+              )}
+            </Box>
+          </Box>
+        )}
+
+        {/* Admin Action Buttons */}
         {showActions && (
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Box>

@@ -33,6 +33,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const response = await AuthService.login({ phoneNumber, password });
       const userData: AuthUser = {
+        userId: response.userId,
         phoneNumber: response.phoneNumber,
         email: response.email,
         firstName: response.firstName,

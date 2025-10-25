@@ -31,16 +31,13 @@ import {
   Palette as PaletteIcon,
   Business as BusinessIcon,
   Home as TentIcon,
-  Restaurant as CateringIcon,
-  AllInclusive as AllIcon,
   FilterList as FilterIcon,
 } from '@mui/icons-material';
-import { Business, Theme, Image, Inventory, InventoryImage, Plate } from '../types';
+import { Business, Theme, Image, Inventory, InventoryImage } from '../types';
 import BusinessService from '../services/businessService';
 import ThemeService from '../services/themeService';
 import ImageService from '../services/imageService';
 import InventoryService from '../services/inventoryService';
-import plateService from '../services/plateService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -75,10 +72,8 @@ const ClientExplore: React.FC = () => {
   const [showBusinessDetail, setShowBusinessDetail] = useState(false);
   const [businessThemes, setBusinessThemes] = useState<{[key: string]: Theme[]}>({});
   const [businessInventory, setBusinessInventory] = useState<{[key: string]: Inventory[]}>({});
-  const [businessPlates, setBusinessPlates] = useState<{[key: string]: Plate[]}>({});
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('tent');
   const [filteredBusinesses, setFilteredBusinesses] = useState<Business[]>([]);
-  const [plates, setPlates] = useState<Plate[]>([]);
   const [refreshKey, setRefreshKey] = useState<number>(0);
 
   useEffect(() => {
@@ -94,19 +89,18 @@ const ClientExplore: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [businessesData, themesData, inventoryData, platesData] = await Promise.all([
+      const [businessesData, themesData, inventoryData] = await Promise.all([
         BusinessService.getAllBusinesses(),
         ThemeService.getAllThemes(),
-        InventoryService.getAllInventory(),
-        plateService.getAllPlates()
+        InventoryService.getAllInventory()
       ]);
       
       setBusinesses(businessesData);
       setThemes(themesData);
       setInventory(inventoryData);
-      setPlates(platesData);
       
-      setFilteredBusinesses(businessesData);
+      // Filter businesses by default category (tent)
+      filterBusinessesByCategory('tent');
       
       // Group themes by business
       const themesByBusiness: {[key: string]: Theme[]} = {};
@@ -127,16 +121,6 @@ const ClientExplore: React.FC = () => {
         inventoryByBusiness[item.businessId].push(item);
       });
       setBusinessInventory(inventoryByBusiness);
-      
-      // Group plates by business
-      const platesByBusiness: {[key: string]: Plate[]} = {};
-      platesData.forEach(plate => {
-        if (!platesByBusiness[plate.businessId]) {
-          platesByBusiness[plate.businessId] = [];
-        }
-        platesByBusiness[plate.businessId].push(plate);
-      });
-      setBusinessPlates(platesByBusiness);
     } catch (err) {
       setError('Failed to fetch data');
       console.error('Error fetching data:', err);
@@ -156,35 +140,21 @@ const ClientExplore: React.FC = () => {
       setActiveTab(0); // Reset to first tab when category changes
       setBusinessThemes({}); // Clear business themes
       setBusinessInventory({}); // Clear business inventory
-      setBusinessPlates({}); // Clear business plates
       setRefreshKey(Date.now()); // Force refresh
       filterBusinessesByCategory(newCategory);
     }
   };
 
   const filterBusinessesByCategory = (category: string) => {
-    if (category === 'all') {
-      setFilteredBusinesses(businesses);
-    } else {
-      const filtered = businesses.filter(business => {
-        const categoryLower = business.businessCategory.toLowerCase();
-        if (category === 'tent') {
-          return categoryLower.includes('tent') || 
-                 categoryLower.includes('event') || 
-                 categoryLower.includes('wedding') ||
-                 categoryLower.includes('party') ||
-                 categoryLower.includes('decoration');
-        } else if (category === 'catering') {
-          return categoryLower.includes('catering') || 
-                 categoryLower.includes('food') || 
-                 categoryLower.includes('restaurant') ||
-                 categoryLower.includes('dining') ||
-                 categoryLower.includes('catering');
-        }
-        return false;
-      });
-      setFilteredBusinesses(filtered);
-    }
+    const filtered = businesses.filter(business => {
+      const categoryLower = business.businessCategory.toLowerCase();
+      return categoryLower.includes('tent') || 
+             categoryLower.includes('event') || 
+             categoryLower.includes('wedding') ||
+             categoryLower.includes('party') ||
+             categoryLower.includes('decoration');
+    });
+    setFilteredBusinesses(filtered);
   };
 
   const handleBusinessClick = (business: Business) => {
@@ -247,7 +217,7 @@ const ClientExplore: React.FC = () => {
         <ToggleButtonGroup
           value={selectedCategory}
           exclusive
-          onChange={handleCategoryChange}
+          disabled
           aria-label="business category filter"
           sx={{
             '& .MuiToggleButton-root': {
@@ -266,25 +236,15 @@ const ClientExplore: React.FC = () => {
             },
           }}
         >
-          <ToggleButton value="all" sx={{ px: 3, py: 1.5 }}>
-            <AllIcon sx={{ mr: 1 }} />
-            All Businesses
-          </ToggleButton>
           <ToggleButton value="tent" sx={{ px: 3, py: 1.5 }}>
             <TentIcon sx={{ mr: 1 }} />
             Tent & Events
-          </ToggleButton>
-          <ToggleButton value="catering" sx={{ px: 3, py: 1.5 }}>
-            <CateringIcon sx={{ mr: 1 }} />
-            Catering & Food
           </ToggleButton>
         </ToggleButtonGroup>
         
         <Box mt={2}>
           <Typography variant="caption" sx={{ opacity: 0.8 }}>
-            Showing {filteredBusinesses.length} business{filteredBusinesses.length !== 1 ? 'es' : ''}
-            {selectedCategory !== 'all' && ` in ${selectedCategory === 'tent' ? 'Tent & Events' : 'Catering & Food'} category`}
-            {selectedCategory === 'catering' && ` • ${plates.length} plates available`}
+            Showing {filteredBusinesses.length} business{filteredBusinesses.length !== 1 ? 'es' : ''} in Tent & Events category
           </Typography>
         </Box>
       </Paper>
@@ -293,32 +253,21 @@ const ClientExplore: React.FC = () => {
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mt: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange} aria-label="explore tabs">
-          {selectedCategory === 'catering' ? (
-            <Tab
-              icon={<CateringIcon />}
-              label={`Plates (${plates.length})`}
-              iconPosition="start"
-            />
-          ) : (
-            <>
-              <Tab
-                icon={<PaletteIcon />}
-                label={`Themes (${themes.length})`}
-                iconPosition="start"
-              />
-              <Tab
-                icon={<InventoryIcon />}
-                label={`Inventory (${inventory.length})`}
-                iconPosition="start"
-              />
-            </>
-          )}
+          <Tab
+            icon={<PaletteIcon />}
+            label={`Themes (${themes.length})`}
+            iconPosition="start"
+          />
+          <Tab
+            icon={<InventoryIcon />}
+            label={`Inventory (${inventory.length})`}
+            iconPosition="start"
+          />
         </Tabs>
       </Box>
 
-      {/* Themes Tab - Only show for non-catering categories */}
-      {selectedCategory !== 'catering' && (
-        <TabPanel value={activeTab} index={0} key={`themes-${selectedCategory}-${refreshKey}`}>
+      {/* Themes Tab */}
+      <TabPanel value={activeTab} index={0} key={`themes-${selectedCategory}-${refreshKey}`}>
           <Fade in={true} timeout={500}>
             <Box>
               {filteredBusinesses.map((business, businessIndex) => {
@@ -402,11 +351,9 @@ const ClientExplore: React.FC = () => {
             </Box>
           )}
         </TabPanel>
-      )}
 
-      {/* Inventory Tab - Only show for non-catering categories */}
-      {selectedCategory !== 'catering' && (
-        <TabPanel value={activeTab} index={1} key={`inventory-${selectedCategory}-${refreshKey}`}>
+      {/* Inventory Tab */}
+      <TabPanel value={activeTab} index={1} key={`inventory-${selectedCategory}-${refreshKey}`}>
           <Fade in={true} timeout={500}>
             <Box>
               {filteredBusinesses.map((business, businessIndex) => {
@@ -490,285 +437,7 @@ const ClientExplore: React.FC = () => {
             </Box>
           )}
         </TabPanel>
-      )}
 
-      {/* Plates Tab - Index 0 for catering, Index 2 for others */}
-      {selectedCategory === 'catering' && (
-        <TabPanel value={activeTab} index={0} key={`plates-${selectedCategory}-${refreshKey}`}>
-          <Fade in={true} timeout={500}>
-            <Box>
-              {filteredBusinesses.map((business, businessIndex) => {
-                const businessPlatesList = businessPlates[business.businessId] || [];
-                if (businessPlatesList.length === 0) return null;
-                
-                return (
-                  <Slide 
-                    key={business.businessId} 
-                    direction="up" 
-                    in={true} 
-                    timeout={300 + businessIndex * 100}
-                  >
-                    <Box sx={{ mb: 6 }}>
-                      {/* Business Name as Heading */}
-                      <Box sx={{ mb: 3 }}>
-                        <Typography variant="h3" gutterBottom sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'primary.main',
-                          borderBottom: '3px solid',
-                          borderColor: 'primary.main',
-                          pb: 1,
-                          display: 'inline-block'
-                        }}>
-                          {business.businessName}
-                        </Typography>
-                        <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-                          {business.businessCategory} • {businessPlatesList.length} Plate{businessPlatesList.length !== 1 ? 's' : ''} Available
-                        </Typography>
-                      </Box>
-
-                      {/* Plates List */}
-                      <Box sx={{ 
-                        display: 'flex',
-                        gap: 2,
-                        overflowX: 'auto',
-                        scrollBehavior: 'smooth',
-                        pb: 2,
-                        '&::-webkit-scrollbar': {
-                          height: 8,
-                        },
-                        '&::-webkit-scrollbar-track': {
-                          backgroundColor: 'rgba(0,0,0,0.1)',
-                          borderRadius: 4,
-                        },
-                        '&::-webkit-scrollbar-thumb': {
-                          backgroundColor: 'rgba(0,0,0,0.3)',
-                          borderRadius: 4,
-                          '&:hover': {
-                            backgroundColor: 'rgba(0,0,0,0.5)',
-                          },
-                        },
-                      }}>
-                        {businessPlatesList.map((plate) => (
-                          <Box
-                            key={plate.plateId}
-                            sx={{
-                              minWidth: '280px',
-                              maxWidth: '280px',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <PlateCard plate={plate} />
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  </Slide>
-                );
-              })}
-              {filteredBusinesses.length === 0 && plates.length > 0 && (
-                <Box>
-                  <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-                    All Available Plates
-                  </Typography>
-                  <Box sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2 }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        gap: 2,
-                        overflowX: 'auto',
-                        scrollBehavior: 'smooth',
-                        '&::-webkit-scrollbar': {
-                          height: 8,
-                        },
-                        '&::-webkit-scrollbar-track': {
-                          backgroundColor: 'rgba(0,0,0,0.1)',
-                          borderRadius: 4,
-                        },
-                        '&::-webkit-scrollbar-thumb': {
-                          backgroundColor: 'rgba(0,0,0,0.3)',
-                          borderRadius: 4,
-                          '&:hover': {
-                            backgroundColor: 'rgba(0,0,0,0.5)',
-                          },
-                        },
-                      }}
-                    >
-                      {plates.map((plate) => (
-                        <Box
-                          key={plate.plateId}
-                          sx={{
-                            minWidth: '280px',
-                            maxWidth: '280px',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <PlateCard plate={plate} />
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                </Box>
-              )}
-              {filteredBusinesses.length === 0 && plates.length === 0 && (
-                <Box textAlign="center" py={4}>
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
-                    No catering businesses found
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Try selecting a different category
-                  </Typography>
-                </Box>
-              )}
-              {plates.length === 0 && filteredBusinesses.length > 0 && (
-                <Box textAlign="center" py={4}>
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
-                    No plates available
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Check back later for new dishes
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Fade>
-        </TabPanel>
-      )}
-
-      {/* Plates Tab - For non-catering categories */}
-      {selectedCategory !== 'catering' && (
-        <TabPanel value={activeTab} index={2} key={`plates-${selectedCategory}-${refreshKey}`}>
-          <Fade in={true} timeout={500}>
-            <Box>
-              {filteredBusinesses.map((business, businessIndex) => {
-                const businessPlatesList = businessPlates[business.businessId] || [];
-                if (businessPlatesList.length === 0) return null;
-                
-                return (
-                  <Slide 
-                    key={business.businessId} 
-                    direction="up" 
-                    in={true} 
-                    timeout={300 + businessIndex * 100}
-                  >
-                    <Box sx={{ mb: 6 }}>
-                      {/* Business Name as Heading */}
-                      <Box sx={{ mb: 3 }}>
-                        <Typography variant="h3" gutterBottom sx={{ 
-                          fontWeight: 'bold', 
-                          color: 'primary.main',
-                          borderBottom: '3px solid',
-                          borderColor: 'primary.main',
-                          pb: 1,
-                          display: 'inline-block'
-                        }}>
-                          {business.businessName}
-                        </Typography>
-                        <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-                          {business.businessCategory} • {businessPlatesList.length} Plate{businessPlatesList.length !== 1 ? 's' : ''} Available
-                        </Typography>
-                      </Box>
-
-                      {/* Plates List */}
-                      <Box sx={{ 
-                        display: 'flex',
-                        gap: 2,
-                        overflowX: 'auto',
-                        scrollBehavior: 'smooth',
-                        pb: 2,
-                        '&::-webkit-scrollbar': {
-                          height: 8,
-                        },
-                        '&::-webkit-scrollbar-track': {
-                          backgroundColor: 'rgba(0,0,0,0.1)',
-                          borderRadius: 4,
-                        },
-                        '&::-webkit-scrollbar-thumb': {
-                          backgroundColor: 'rgba(0,0,0,0.3)',
-                          borderRadius: 4,
-                          '&:hover': {
-                            backgroundColor: 'rgba(0,0,0,0.5)',
-                          },
-                        },
-                      }}>
-                        {businessPlatesList.map((plate) => (
-                          <Box
-                            key={plate.plateId}
-                            sx={{
-                              minWidth: '280px',
-                              maxWidth: '280px',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <PlateCard plate={plate} />
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  </Slide>
-                );
-              })}
-              {filteredBusinesses.length === 0 && plates.length > 0 && (
-                <Box>
-                  <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
-                    All Available Plates
-                  </Typography>
-                  <Box sx={{ 
-                    position: 'relative', 
-                    overflow: 'hidden', 
-                    borderRadius: 2,
-                  }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        gap: 2,
-                        overflowX: 'auto',
-                        scrollBehavior: 'smooth',
-                        '&::-webkit-scrollbar': {
-                          height: 8,
-                        },
-                        '&::-webkit-scrollbar-track': {
-                          backgroundColor: 'rgba(0,0,0,0.1)',
-                          borderRadius: 4,
-                        },
-                        '&::-webkit-scrollbar-thumb': {
-                          backgroundColor: 'rgba(0,0,0,0.3)',
-                          borderRadius: 4,
-                          '&:hover': {
-                            backgroundColor: 'rgba(0,0,0,0.5)',
-                          },
-                        },
-                      }}
-                    >
-                      {plates.map((plate) => (
-                        <Box
-                          key={plate.plateId}
-                          sx={{
-                            minWidth: '280px',
-                            maxWidth: '280px',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <PlateCard plate={plate} />
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                </Box>
-              )}
-              {plates.length === 0 && (
-                <Box textAlign="center" py={4}>
-                  <Typography variant="h6" color="text.secondary" gutterBottom>
-                    No plates available
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Check back later for new dishes
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Fade>
-        </TabPanel>
-      )}
 
       {/* Business Detail Dialog */}
       {selectedBusiness && (
@@ -1189,68 +858,5 @@ const BusinessDetailDialog: React.FC<{
   );
 };
 
-// Plate Card Component
-const PlateCard: React.FC<{ plate: Plate }> = ({ plate }) => {
-  return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ position: 'relative', height: 200, overflow: 'hidden' }}>
-        {plate.plateImage ? (
-          <img
-            src={plate.plateImage}
-            alt={plate.dishName}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
-        ) : (
-          <Box
-            display="flex"
-            justifyContent="center"
-            alignItems="center"
-            height="100%"
-            bgcolor="grey.100"
-          >
-            <CateringIcon color="disabled" />
-          </Box>
-        )}
-        <Chip
-          label={plate.isActive ? 'Available' : 'Unavailable'}
-          color={plate.isActive ? 'success' : 'error'}
-          size="small"
-          sx={{ position: 'absolute', top: 8, right: 8 }}
-        />
-        <Chip
-          label={plate.dishType === 'veg' ? 'Vegetarian' : 'Non-Vegetarian'}
-          color={plate.dishType === 'veg' ? 'success' : 'error'}
-          size="small"
-          sx={{ position: 'absolute', top: 8, left: 8 }}
-        />
-      </Box>
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Typography variant="h6" gutterBottom>
-          {plate.dishName}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          {plate.dishDescription}
-        </Typography>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
-          <Chip 
-            label={plate.dishType === 'veg' ? 'Veg' : 'Non-Veg'} 
-            size="small" 
-            color={plate.dishType === 'veg' ? 'success' : 'error'}
-          />
-          <Typography variant="h6" color="primary">
-            ₹{plate.price}
-          </Typography>
-        </Box>
-        <Button variant="outlined" size="small" fullWidth sx={{ mt: 1 }}>
-          View Details
-        </Button>
-      </CardContent>
-    </Card>
-  );
-};
 
 export default ClientExplore;

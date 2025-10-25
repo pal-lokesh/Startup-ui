@@ -19,29 +19,42 @@ import {
   Delete as DeleteIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
+  ShoppingCart as CartIcon,
+  Add as AddIcon,
+  FlashOn as BuyNowIcon,
 } from '@mui/icons-material';
-import { Plate } from '../types';
+import { Plate, Business } from '../types';
 import PlateService from '../services/plateService';
 import ImageCarousel from './ImageCarousel';
+import { useCart } from '../contexts/CartContext';
 
 interface PlateCardProps {
   plate: Plate;
+  business?: Business;
   onEdit: (plate: Plate) => void;
   onDelete: (plateId: string) => void;
   onUpdate: (plate: Plate) => void;
+  onBuyNow?: (plate: Plate, business: Business) => void;
+  showCartButton?: boolean;
+  showBuyNowButton?: boolean;
 }
 
 const PlateCard: React.FC<PlateCardProps> = ({
   plate,
+  business,
   onEdit,
   onDelete,
   onUpdate,
+  onBuyNow,
+  showCartButton = true,
+  showBuyNowButton = true,
 }) => {
   const [isEditingPrice, setIsEditingPrice] = useState(false);
   const [editPrice, setEditPrice] = useState(plate.price.toString());
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addToCart, isInCart } = useCart();
 
   const handlePriceEdit = () => {
     setIsEditingPrice(true);
@@ -175,6 +188,39 @@ const PlateCard: React.FC<PlateCardProps> = ({
               </Box>
             )}
             
+            {/* Cart and Buy Now Buttons */}
+            {business && (showCartButton || showBuyNowButton) && (
+              <Box sx={{ mb: 2 }}>
+                <Box display="flex" gap={1} mb={1}>
+                  {showCartButton && (
+                    <Button
+                      variant={isInCart(plate.plateId, 'plate') ? "contained" : "outlined"}
+                      color={isInCart(plate.plateId, 'plate') ? "success" : "primary"}
+                      size="small"
+                      startIcon={<CartIcon />}
+                      onClick={() => addToCart(plate, business)}
+                      fullWidth
+                    >
+                      {isInCart(plate.plateId, 'plate') ? "In Cart" : "Add to Cart"}
+                    </Button>
+                  )}
+                  {showBuyNowButton && (
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="small"
+                      startIcon={<BuyNowIcon />}
+                      onClick={() => onBuyNow && onBuyNow(plate, business)}
+                      fullWidth
+                    >
+                      Buy Now
+                    </Button>
+                  )}
+                </Box>
+              </Box>
+            )}
+
+            {/* Admin Action Buttons */}
             <Box sx={{ display: 'flex', gap: 1 }}>
               <IconButton
                 size="small"

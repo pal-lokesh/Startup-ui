@@ -31,6 +31,7 @@ import plateService from '../services/plateService';
 import ThemeCard from '../components/ThemeCard';
 import InventoryCard from '../components/InventoryCard';
 import PlateCard from '../components/PlateCard';
+import { useCart } from '../contexts/CartContext';
 
 const ClientExplore: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -46,6 +47,7 @@ const ClientExplore: React.FC = () => {
   const [businessInventory, setBusinessInventory] = useState<{[key: string]: Inventory[]}>({});
   const [businessPlates, setBusinessPlates] = useState<{[key: string]: Plate[]}>({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const { addToCart } = useCart();
 
   useEffect(() => {
     fetchData();
@@ -72,6 +74,7 @@ const ClientExplore: React.FC = () => {
       setInventory(inventoryData);
       setPlates(platesData);
       
+      // Don't filter on initial load - show all businesses initially
       setFilteredBusinesses(businessesData);
       
       // Group themes by business
@@ -103,6 +106,7 @@ const ClientExplore: React.FC = () => {
         platesByBusiness[plate.businessId].push(plate);
       });
       setBusinessPlates(platesByBusiness);
+      
     } catch (err) {
       setError('Failed to fetch data');
       console.error('Error fetching data:', err);
@@ -131,26 +135,45 @@ const ClientExplore: React.FC = () => {
   const filterBusinessesByCategory = (category: string) => {
     if (category === 'all') {
       setFilteredBusinesses(businesses);
-    } else {
-      const filtered = businesses.filter(business => {
-        const categoryLower = business.businessCategory.toLowerCase();
-        if (category === 'tent') {
-          return categoryLower.includes('tent') || 
-                 categoryLower.includes('event') || 
-                 categoryLower.includes('wedding') ||
-                 categoryLower.includes('party') ||
-                 categoryLower.includes('decoration');
-        } else if (category === 'catering') {
-          return categoryLower.includes('catering') || 
-                 categoryLower.includes('food') || 
-                 categoryLower.includes('restaurant') ||
-                 categoryLower.includes('cafe') ||
-                 categoryLower.includes('catering');
-        }
-        return false;
-      });
-      setFilteredBusinesses(filtered);
+      return;
     }
+    
+    const filtered = businesses.filter(business => {
+      const categoryLower = business.businessCategory.toLowerCase();
+      
+      if (category === 'tent') {
+        return categoryLower.includes('tent') || 
+               categoryLower.includes('event') || 
+               categoryLower.includes('wedding') ||
+               categoryLower.includes('party') ||
+               categoryLower.includes('decoration');
+      } else if (category === 'catering') {
+        return categoryLower.includes('catering') || 
+               categoryLower.includes('food') || 
+               categoryLower.includes('restaurant') ||
+               categoryLower.includes('cafe') ||
+               categoryLower.includes('catering');
+      }
+      return false;
+    });
+    
+    setFilteredBusinesses(filtered);
+  };
+
+  // Buy Now handlers
+  const handleThemeBuyNow = (theme: Theme, business: Business) => {
+    addToCart(theme, business);
+    // You can add additional logic here like opening cart or showing a success message
+  };
+
+  const handleInventoryBuyNow = (inventory: Inventory, business: Business) => {
+    addToCart(inventory, business);
+    // You can add additional logic here like opening cart or showing a success message
+  };
+
+  const handlePlateBuyNow = (plate: Plate, business: Business) => {
+    addToCart(plate, business);
+    // You can add additional logic here like opening cart or showing a success message
   };
 
   if (loading) {
@@ -223,7 +246,197 @@ const ClientExplore: React.FC = () => {
 
       {/* Business-Based Organization */}
       <Box sx={{ mt: 4 }}>
-        {selectedCategory === 'catering' ? (
+        {selectedCategory === 'all' ? (
+          /* All Businesses Section */
+          filteredBusinesses.map((business, businessIndex) => {
+            const businessThemesList = businessThemes[business.businessId] || [];
+            const businessInventoryList = businessInventory[business.businessId] || [];
+            const businessPlatesList = businessPlates[business.businessId] || [];
+            
+            // Skip businesses with no content
+            if (businessThemesList.length === 0 && businessInventoryList.length === 0 && businessPlatesList.length === 0) return null;
+            
+            return (
+              <Slide 
+                key={business.businessId} 
+                direction="up" 
+                in={true} 
+                timeout={300 + businessIndex * 100}
+              >
+                <Box sx={{ mb: 8 }}>
+                  {/* Business Name as Main Heading */}
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="h2" gutterBottom sx={{ 
+                      fontWeight: 'bold', 
+                      color: 'primary.main',
+                      borderBottom: '4px solid',
+                      borderColor: 'primary.main',
+                      pb: 2,
+                      display: 'inline-block'
+                    }}>
+                      {business.businessName}
+                    </Typography>
+                    <Typography variant="h5" color="text.secondary" sx={{ mb: 3 }}>
+                      {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items • {businessPlatesList.length} Plates
+                    </Typography>
+                  </Box>
+
+                  {/* Show themes if available */}
+                  {businessThemesList.length > 0 && (
+                    <Box sx={{ mb: 4 }}>
+                      <Typography variant="h5" gutterBottom sx={{ mb: 3, color: 'primary.main' }}>
+                        🎨 Themes
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'flex',
+                        gap: 2,
+                        overflowX: 'auto',
+                        scrollBehavior: 'smooth',
+                        pb: 2,
+                        '&::-webkit-scrollbar': {
+                          height: 8,
+                        },
+                        '&::-webkit-scrollbar-track': {
+                          backgroundColor: 'rgba(0,0,0,0.1)',
+                          borderRadius: 4,
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                          backgroundColor: 'rgba(0,0,0,0.3)',
+                          borderRadius: 4,
+                          '&:hover': {
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                          },
+                        },
+                      }}>
+                        {businessThemesList.map((theme) => (
+                          <Box
+                            key={theme.themeId}
+                            sx={{
+                              minWidth: '280px',
+                              maxWidth: '280px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <ThemeCard 
+                              theme={theme} 
+                              business={business}
+                              onBuyNow={handleThemeBuyNow}
+                              showCartButton={true}
+                              showBuyNowButton={true}
+                              showActions={false}
+                            />
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Show inventory if available */}
+                  {businessInventoryList.length > 0 && (
+                    <Box sx={{ mb: 4 }}>
+                      <Typography variant="h5" gutterBottom sx={{ mb: 3, color: 'primary.main' }}>
+                        📦 Inventory
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'flex',
+                        gap: 2,
+                        overflowX: 'auto',
+                        scrollBehavior: 'smooth',
+                        pb: 2,
+                        '&::-webkit-scrollbar': {
+                          height: 8,
+                        },
+                        '&::-webkit-scrollbar-track': {
+                          backgroundColor: 'rgba(0,0,0,0.1)',
+                          borderRadius: 4,
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                          backgroundColor: 'rgba(0,0,0,0.3)',
+                          borderRadius: 4,
+                          '&:hover': {
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                          },
+                        },
+                      }}>
+                        {businessInventoryList.map((item) => (
+                          <Box
+                            key={item.inventoryId}
+                            sx={{
+                              minWidth: '280px',
+                              maxWidth: '280px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <InventoryCard 
+                              inventory={item} 
+                              business={business}
+                              onBuyNow={handleInventoryBuyNow}
+                              showCartButton={true}
+                              showBuyNowButton={true}
+                              showActions={false}
+                            />
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Show plates if available */}
+                  {businessPlatesList.length > 0 && (
+                    <Box sx={{ mb: 4 }}>
+                      <Typography variant="h5" gutterBottom sx={{ mb: 3, color: 'primary.main' }}>
+                        🍽️ Plates
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'flex',
+                        gap: 2,
+                        overflowX: 'auto',
+                        scrollBehavior: 'smooth',
+                        pb: 2,
+                        '&::-webkit-scrollbar': {
+                          height: 8,
+                        },
+                        '&::-webkit-scrollbar-track': {
+                          backgroundColor: 'rgba(0,0,0,0.1)',
+                          borderRadius: 4,
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                          backgroundColor: 'rgba(0,0,0,0.3)',
+                          borderRadius: 4,
+                          '&:hover': {
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                          },
+                        },
+                      }}>
+                        {businessPlatesList.map((plate) => (
+                          <Box
+                            key={plate.plateId}
+                            sx={{
+                              minWidth: '280px',
+                              maxWidth: '280px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <PlateCard 
+                              plate={plate} 
+                              business={business}
+                              onEdit={() => {}} 
+                              onDelete={() => {}} 
+                              onUpdate={() => {}} 
+                              onBuyNow={handlePlateBuyNow}
+                              showCartButton={true}
+                              showBuyNowButton={true}
+                            />
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+              </Slide>
+            );
+          })
+        ) : selectedCategory === 'catering' ? (
           /* Catering & Food Section */
           <Box>
             <Typography variant="h4" gutterBottom sx={{ 
@@ -236,6 +449,7 @@ const ClientExplore: React.FC = () => {
             }}>
               🍽️ Catering & Food
             </Typography>
+            
             
             {filteredBusinesses.map((business, businessIndex) => {
               const businessPlatesList = businessPlates[business.businessId] || [];
@@ -310,9 +524,22 @@ const ClientExplore: React.FC = () => {
                 </Slide>
               );
             })}
+            
+            
+            {/* No data message */}
+            {filteredBusinesses.length === 0 && plates.length === 0 && (
+              <Box textAlign="center" py={4}>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  No catering businesses found
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Try selecting a different category
+                </Typography>
+              </Box>
+            )}
           </Box>
         ) : (
-          /* Tent & Events / All Businesses Section */
+          /* Tent & Events Section */
           filteredBusinesses.map((business, businessIndex) => {
             const businessThemesList = businessThemes[business.businessId] || [];
             const businessInventoryList = businessInventory[business.businessId] || [];
@@ -397,7 +624,14 @@ const ClientExplore: React.FC = () => {
                               flexShrink: 0,
                             }}
                           >
-                            <ThemeCard theme={theme} />
+                            <ThemeCard 
+                              theme={theme} 
+                              business={business}
+                              onBuyNow={handleThemeBuyNow}
+                              showCartButton={true}
+                              showBuyNowButton={true}
+                              showActions={false}
+                            />
                           </Box>
                         ))}
                       </Box>
@@ -440,7 +674,14 @@ const ClientExplore: React.FC = () => {
                               flexShrink: 0,
                             }}
                           >
-                            <InventoryCard inventory={item} />
+                            <InventoryCard 
+                              inventory={item} 
+                              business={business}
+                              onBuyNow={handleInventoryBuyNow}
+                              showCartButton={true}
+                              showBuyNowButton={true}
+                              showActions={false}
+                            />
                           </Box>
                         ))}
                       </Box>
