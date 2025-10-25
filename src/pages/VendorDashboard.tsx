@@ -23,6 +23,9 @@ import {
   Language as WebsiteIcon,
   Schedule as ScheduleIcon,
   Edit as EditIcon,
+  Chat as ChatIcon,
+  Notifications as NotificationIcon,
+  ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import BusinessService from '../services/businessService';
@@ -42,9 +45,12 @@ import PlateManagementForm from '../components/PlateManagementForm';
 import PlateCard from '../components/PlateCard';
 import orderService from '../services/orderService';
 import notificationService from '../services/notificationService';
+import chatService from '../services/chatService';
+import { useNavigate } from 'react-router-dom';
 
 const VendorDashboard: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
   const [themes, setThemes] = useState<Theme[]>([]);
@@ -69,6 +75,7 @@ const VendorDashboard: React.FC = () => {
   
   // Notification state
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
     const fetchVendorData = async () => {
@@ -136,6 +143,19 @@ const VendorDashboard: React.FC = () => {
     // Fetch notification count
     if (user?.phoneNumber) {
       fetchNotificationCount();
+      fetchUnreadChatCount();
+    }
+  }, [user?.phoneNumber]);
+
+  // Refresh unread counts when component mounts or user changes
+  useEffect(() => {
+    if (user?.phoneNumber) {
+      const interval = setInterval(() => {
+        fetchNotificationCount();
+        fetchUnreadChatCount();
+      }, 30000); // Refresh every 30 seconds
+      
+      return () => clearInterval(interval);
     }
   }, [user?.phoneNumber]);
 
@@ -322,6 +342,17 @@ const VendorDashboard: React.FC = () => {
     }
   };
 
+  const fetchUnreadChatCount = async () => {
+    if (!user?.phoneNumber) return;
+    
+    try {
+      const count = await chatService.getTotalUnreadCount(user.phoneNumber);
+      setUnreadChatCount(count);
+    } catch (err: any) {
+      console.error('Error fetching unread chat count:', err);
+    }
+  };
+
   // Helper function to get the correct Orders tab index
   const getOrdersTabIndex = () => {
     if (!selectedBusiness) return -1;
@@ -432,6 +463,118 @@ const VendorDashboard: React.FC = () => {
           onBusinessSelect={handleBusinessSelect}
           onBusinessesChange={handleBusinessesChange}
         />
+      </Box>
+
+      {/* Quick Access Section */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+          Quick Access
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6} md={4}>
+            <Card 
+              sx={{ 
+                cursor: 'pointer',
+                '&:hover': { 
+                  boxShadow: 4,
+                  transform: 'translateY(-2px)',
+                  transition: 'all 0.2s ease-in-out'
+                }
+              }}
+              onClick={() => navigate('/vendor-chat')}
+            >
+              <CardContent>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                  <Box display="flex" alignItems="center">
+                    {unreadChatCount > 0 ? (
+                      <Box sx={{ position: 'relative', mr: 2 }}>
+                        <ChatIcon color="primary" sx={{ fontSize: 32 }} />
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: -8,
+                            right: -8,
+                            backgroundColor: 'error.main',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: 20,
+                            height: 20,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          {unreadChatCount}
+                        </Box>
+                      </Box>
+                    ) : (
+                      <ChatIcon color="primary" sx={{ mr: 2, fontSize: 32 }} />
+                    )}
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        Chat with Clients
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {unreadChatCount > 0 
+                          ? `${unreadChatCount} unread message${unreadChatCount > 1 ? 's' : ''}`
+                          : 'Communicate with your clients'
+                        }
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <ArrowForwardIcon color="action" />
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} sm={6} md={4}>
+            <Card 
+              sx={{ 
+                cursor: 'pointer',
+                '&:hover': { 
+                  boxShadow: 4,
+                  transform: 'translateY(-2px)',
+                  transition: 'all 0.2s ease-in-out'
+                }
+              }}
+              onClick={() => setActiveTab(4)} // Orders tab
+            >
+              <CardContent>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                  <Box display="flex" alignItems="center">
+                    <NotificationIcon 
+                      color={unreadNotificationCount > 0 ? "error" : "primary"} 
+                      sx={{ mr: 2, fontSize: 32 }} 
+                    />
+                    <Box>
+                      <Typography variant="h6" gutterBottom>
+                        Orders & Notifications
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {unreadNotificationCount > 0 
+                          ? `${unreadNotificationCount} unread notifications`
+                          : 'View your orders and notifications'
+                        }
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <ArrowForwardIcon color="action" />
+                </Box>
+                {unreadNotificationCount > 0 && (
+                  <Chip 
+                    label={`${unreadNotificationCount} New`} 
+                    color="error" 
+                    size="small"
+                    sx={{ mt: 1 }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Box>
 
       {selectedBusiness && (

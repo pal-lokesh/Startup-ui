@@ -15,12 +15,16 @@ import {
   Fade,
   Slide,
   Paper,
+  Button,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Palette as PaletteIcon,
   Inventory as InventoryIcon,
   Restaurant as CateringIcon,
   Business as BusinessIcon,
+  Chat as ChatIcon,
 } from '@mui/icons-material';
 
 import { Business, Theme, Inventory, Plate } from '../types';
@@ -28,10 +32,13 @@ import BusinessService from '../services/businessService';
 import ThemeService from '../services/themeService';
 import InventoryService from '../services/inventoryService';
 import plateService from '../services/plateService';
+import chatService from '../services/chatService';
 import ThemeCard from '../components/ThemeCard';
 import InventoryCard from '../components/InventoryCard';
 import PlateCard from '../components/PlateCard';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const ClientExplore: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -47,7 +54,10 @@ const ClientExplore: React.FC = () => {
   const [businessInventory, setBusinessInventory] = useState<{[key: string]: Inventory[]}>({});
   const [businessPlates, setBusinessPlates] = useState<{[key: string]: Plate[]}>({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const [chatLoading, setChatLoading] = useState<{[key: string]: boolean}>({});
   const { addToCart } = useCart();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
@@ -176,6 +186,37 @@ const ClientExplore: React.FC = () => {
     // You can add additional logic here like opening cart or showing a success message
   };
 
+  const handleStartChat = async (business: Business) => {
+    if (!user) {
+      alert('Please log in to start a chat');
+      return;
+    }
+
+    const businessId = business.businessId;
+    setChatLoading(prev => ({ ...prev, [businessId]: true }));
+
+    try {
+      // Get vendor phone from business data
+      const vendorPhone = business.phoneNumber;
+      
+      // Create or get chat
+      const chat = await chatService.createOrGetChat(
+        user.phoneNumber,
+        vendorPhone,
+        business.businessId,
+        business.businessName
+      );
+
+      // Navigate to chat page
+      navigate('/client-chat');
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      alert('Failed to start chat. Please try again.');
+    } finally {
+      setChatLoading(prev => ({ ...prev, [businessId]: false }));
+    }
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -266,16 +307,44 @@ const ClientExplore: React.FC = () => {
                 <Box sx={{ mb: 8 }}>
                   {/* Business Name as Main Heading */}
                   <Box sx={{ mb: 4 }}>
-                    <Typography variant="h2" gutterBottom sx={{ 
-                      fontWeight: 'bold', 
-                      color: 'primary.main',
-                      borderBottom: '4px solid',
-                      borderColor: 'primary.main',
-                      pb: 2,
-                      display: 'inline-block'
-                    }}>
-                      {business.businessName}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                      <Typography variant="h2" gutterBottom sx={{ 
+                        fontWeight: 'bold', 
+                        color: 'primary.main',
+                        borderBottom: '4px solid',
+                        borderColor: 'primary.main',
+                        pb: 2,
+                        display: 'inline-block',
+                        flex: 1
+                      }}>
+                        {business.businessName}
+                      </Typography>
+                      <Tooltip title="Start a conversation with this vendor">
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          startIcon={<ChatIcon />}
+                          onClick={() => handleStartChat(business)}
+                          disabled={chatLoading[business.businessId]}
+                          sx={{
+                            minWidth: 'auto',
+                            px: 2,
+                            py: 1,
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 'bold',
+                            boxShadow: 2,
+                            '&:hover': {
+                              boxShadow: 4,
+                              transform: 'translateY(-1px)',
+                            },
+                            transition: 'all 0.2s ease-in-out',
+                          }}
+                        >
+                          {chatLoading[business.businessId] ? 'Starting...' : 'Chat'}
+                        </Button>
+                      </Tooltip>
+                    </Box>
                     <Typography variant="h5" color="text.secondary" sx={{ mb: 3 }}>
                       {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items • {businessPlatesList.length} Plates
                     </Typography>
@@ -465,16 +534,44 @@ const ClientExplore: React.FC = () => {
                   <Box sx={{ mb: 6 }}>
                     {/* Business Name as Heading */}
                     <Box sx={{ mb: 3 }}>
-                      <Typography variant="h3" gutterBottom sx={{ 
-                        fontWeight: 'bold', 
-                        color: 'primary.main',
-                        borderBottom: '3px solid',
-                        borderColor: 'primary.main',
-                        pb: 1,
-                        display: 'inline-block'
-                      }}>
-                        {business.businessName}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                        <Typography variant="h3" gutterBottom sx={{ 
+                          fontWeight: 'bold', 
+                          color: 'primary.main',
+                          borderBottom: '3px solid',
+                          borderColor: 'primary.main',
+                          pb: 1,
+                          display: 'inline-block',
+                          flex: 1
+                        }}>
+                          {business.businessName}
+                        </Typography>
+                        <Tooltip title="Start a conversation with this vendor">
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<ChatIcon />}
+                            onClick={() => handleStartChat(business)}
+                            disabled={chatLoading[business.businessId]}
+                            sx={{
+                              minWidth: 'auto',
+                              px: 2,
+                              py: 1,
+                              borderRadius: 2,
+                              textTransform: 'none',
+                              fontWeight: 'bold',
+                              boxShadow: 2,
+                              '&:hover': {
+                                boxShadow: 4,
+                                transform: 'translateY(-1px)',
+                              },
+                              transition: 'all 0.2s ease-in-out',
+                            }}
+                          >
+                            {chatLoading[business.businessId] ? 'Starting...' : 'Chat'}
+                          </Button>
+                        </Tooltip>
+                      </Box>
                       <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
                         {business.businessCategory} • {businessPlatesList.length} Plate{businessPlatesList.length !== 1 ? 's' : ''} Available
                       </Typography>
@@ -557,16 +654,44 @@ const ClientExplore: React.FC = () => {
                 <Box sx={{ mb: 8 }}>
                   {/* Business Name as Main Heading */}
                   <Box sx={{ mb: 4 }}>
-                    <Typography variant="h2" gutterBottom sx={{ 
-                      fontWeight: 'bold', 
-                      color: 'primary.main',
-                      borderBottom: '4px solid',
-                      borderColor: 'primary.main',
-                      pb: 2,
-                      display: 'inline-block'
-                    }}>
-                      {business.businessName}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                      <Typography variant="h2" gutterBottom sx={{ 
+                        fontWeight: 'bold', 
+                        color: 'primary.main',
+                        borderBottom: '4px solid',
+                        borderColor: 'primary.main',
+                        pb: 2,
+                        display: 'inline-block',
+                        flex: 1
+                      }}>
+                        {business.businessName}
+                      </Typography>
+                      <Tooltip title="Start a conversation with this vendor">
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          startIcon={<ChatIcon />}
+                          onClick={() => handleStartChat(business)}
+                          disabled={chatLoading[business.businessId]}
+                          sx={{
+                            minWidth: 'auto',
+                            px: 2,
+                            py: 1,
+                            borderRadius: 2,
+                            textTransform: 'none',
+                            fontWeight: 'bold',
+                            boxShadow: 2,
+                            '&:hover': {
+                              boxShadow: 4,
+                              transform: 'translateY(-1px)',
+                            },
+                            transition: 'all 0.2s ease-in-out',
+                          }}
+                        >
+                          {chatLoading[business.businessId] ? 'Starting...' : 'Chat'}
+                        </Button>
+                      </Tooltip>
+                    </Box>
                     <Typography variant="h5" color="text.secondary" sx={{ mb: 3 }}>
                       {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items
                     </Typography>

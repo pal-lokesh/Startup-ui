@@ -16,6 +16,7 @@ import {
   MenuItem,
   Avatar,
   Divider,
+  Badge,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -29,10 +30,14 @@ import {
   Logout,
   ShoppingCart as CartIcon,
   Explore as ExploreIcon,
+  Chat as ChatIcon,
+  Notifications as NotificationIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import Cart from './Cart';
+import notificationService from '../services/notificationService';
+import chatService from '../services/chatService';
 
 const drawerWidth = 240;
 
@@ -44,6 +49,8 @@ const Navigation: React.FC = () => {
   const [cartOpen, setCartOpen] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+  const [notificationCount, setNotificationCount] = React.useState(0);
+  const [unreadChatCount, setUnreadChatCount] = React.useState(0);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -63,17 +70,65 @@ const Navigation: React.FC = () => {
     handleUserMenuClose();
   };
 
+  // Fetch notification count for vendors
+  React.useEffect(() => {
+    if (user && user.userType === 'VENDOR') {
+      const fetchNotificationCount = async () => {
+        try {
+          const count = await notificationService.getNotificationCount(user.phoneNumber);
+          setNotificationCount(count);
+        } catch (error) {
+          console.error('Error fetching notification count:', error);
+        }
+      };
+      
+      fetchNotificationCount();
+      // Refresh every 30 seconds
+      const interval = setInterval(fetchNotificationCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  // Fetch unread chat messages for both clients and vendors
+  React.useEffect(() => {
+    if (user) {
+      const fetchUnreadChatCount = async () => {
+        try {
+          const count = await chatService.getTotalUnreadCount(user.phoneNumber);
+          setUnreadChatCount(count);
+        } catch (error) {
+          console.error('Error fetching unread chat count:', error);
+        }
+      };
+      
+      fetchUnreadChatCount();
+      // Refresh every 15 seconds for chat messages
+      const interval = setInterval(fetchUnreadChatCount, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
   const baseItems = [
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
 
   const clientItems = [
     { text: 'My Orders', icon: <DashboardIcon />, path: '/client-dashboard' },
+    { 
+      text: unreadChatCount > 0 ? `Chat (${unreadChatCount})` : 'Chat', 
+      icon: <ChatIcon />, 
+      path: '/client-chat' 
+    },
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
 
   const vendorItems = [
     { text: 'My Business', icon: <BusinessIcon />, path: '/vendor-dashboard' },
+    { 
+      text: unreadChatCount > 0 ? `Chat (${unreadChatCount})` : 'Chat', 
+      icon: <ChatIcon />, 
+      path: '/vendor-chat' 
+    },
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
 
@@ -108,7 +163,15 @@ const Navigation: React.FC = () => {
               to={item.path}
               selected={location.pathname === item.path}
             >
-              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemIcon>
+                {item.path.includes('chat') && unreadChatCount > 0 ? (
+                  <Badge badgeContent={unreadChatCount} color="error">
+                    {item.icon}
+                  </Badge>
+                ) : (
+                  item.icon
+                )}
+              </ListItemIcon>
               <ListItemText primary={item.text} />
             </ListItemButton>
           </ListItem>
@@ -141,13 +204,78 @@ const Navigation: React.FC = () => {
           </Typography>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {/* Cart Icon for Clients */}
+              {user.userType === 'CLIENT' && (
+                <IconButton
+                  color="inherit"
+                  onClick={() => setCartOpen(true)}
+                  sx={{ mr: 1 }}
+                >
+                  <CartIcon />
+                  {getCartItemCount() > 0 && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        backgroundColor: 'error.main',
+                        color: 'white',
+                        borderRadius: '50%',
+                        width: 20,
+                        height: 20,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {getCartItemCount()}
+                    </Box>
+                  )}
+                </IconButton>
+              )}
+              
+              {/* Notification Icon for Vendors */}
+              {user.userType === 'VENDOR' && (
+                <IconButton
+                  color="inherit"
+                  onClick={() => navigate('/vendor-dashboard')}
+                  sx={{ mr: 1 }}
+                >
+                  <NotificationIcon />
+                  {notificationCount > 0 && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        backgroundColor: 'error.main',
+                        color: 'white',
+                        borderRadius: '50%',
+                        width: 20,
+                        height: 20,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {notificationCount}
+                    </Box>
+                  )}
+                </IconButton>
+              )}
+              
+              {/* Chat Icon for Both Clients and Vendors */}
               <IconButton
                 color="inherit"
-                onClick={() => setCartOpen(true)}
+                onClick={() => navigate(user.userType === 'CLIENT' ? '/client-chat' : '/vendor-chat')}
                 sx={{ mr: 1 }}
               >
-                <CartIcon />
-                {getCartItemCount() > 0 && (
+                <ChatIcon />
+                {unreadChatCount > 0 && (
                   <Box
                     sx={{
                       position: 'absolute',
@@ -165,7 +293,7 @@ const Navigation: React.FC = () => {
                       fontWeight: 'bold',
                     }}
                   >
-                    {getCartItemCount()}
+                    {unreadChatCount}
                   </Box>
                 )}
               </IconButton>

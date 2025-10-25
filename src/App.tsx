@@ -15,6 +15,8 @@ import ImageManagement from './pages/ImageManagement';
 import ExploreThemes from './pages/ExploreThemes';
 import ClientExplore from './pages/ClientExploreNew';
 import ClientDashboard from './pages/ClientDashboard';
+import ClientChat from './pages/ClientChat';
+import VendorChat from './pages/VendorChat';
 import Unauthorized from './pages/Unauthorized';
 
 // Components
@@ -118,6 +120,16 @@ const AppContent: React.FC = () => {
           <Route path="/client-dashboard" element={
             <ProtectedRoute>
               <ClientDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/client-chat" element={
+            <ProtectedRoute>
+              <ClientChat />
+            </ProtectedRoute>
+          } />
+          <Route path="/vendor-chat" element={
+            <ProtectedRoute>
+              <VendorChat />
             </ProtectedRoute>
           } />
           <Route path="/images" element={
