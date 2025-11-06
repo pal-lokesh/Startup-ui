@@ -25,9 +25,22 @@ apiClient.interceptors.request.use(
 
 class InventoryService {
   // Inventory CRUD operations
-  static async createInventory(inventoryData: InventoryFormData): Promise<Inventory> {
-    const response = await apiClient.post('/inventory', inventoryData);
-    return response.data;
+  static async createInventory(inventoryData: InventoryFormData, vendorPhone?: string): Promise<Inventory> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.post('/inventory', inventoryData, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to create products. Only vendors can create products.');
+      }
+      throw error;
+    }
   }
 
   static async getInventoryById(inventoryId: string): Promise<Inventory> {
@@ -45,13 +58,39 @@ class InventoryService {
     return response.data;
   }
 
-  static async updateInventory(inventoryId: string, inventoryData: Partial<InventoryFormData>): Promise<Inventory> {
-    const response = await apiClient.put(`/inventory/${inventoryId}`, inventoryData);
-    return response.data;
+  static async updateInventory(inventoryId: string, inventoryData: Partial<InventoryFormData>, vendorPhone?: string): Promise<Inventory> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.put(`/inventory/${inventoryId}`, inventoryData, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to update this product. You can only update your own products.');
+      }
+      throw error;
+    }
   }
 
-  static async deleteInventory(inventoryId: string): Promise<void> {
-    await apiClient.delete(`/inventory/${inventoryId}`);
+  static async deleteInventory(inventoryId: string, vendorPhone?: string): Promise<void> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      await apiClient.delete(`/inventory/${inventoryId}`, config);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to delete this product. Only vendors can delete their own products.');
+      }
+      throw error;
+    }
   }
 
   static async getInventoryCount(): Promise<number> {
@@ -60,11 +99,24 @@ class InventoryService {
   }
 
   // Inventory Image operations
-  static async createInventoryImage(imageData: InventoryImageFormData): Promise<InventoryImage> {
+  static async createInventoryImage(imageData: InventoryImageFormData, vendorPhone?: string): Promise<InventoryImage> {
     console.log('Sending inventory image data:', imageData);
-    const response = await apiClient.post('/inventory/images', imageData);
-    console.log('Received response:', response.data);
-    return response.data;
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.post('/inventory/images', imageData, config);
+      console.log('Received response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to upload images. Only vendors can upload images.');
+      }
+      throw error;
+    }
   }
 
   static async getInventoryImagesByInventoryId(inventoryId: string): Promise<InventoryImage[]> {
@@ -74,18 +126,57 @@ class InventoryService {
     return response.data;
   }
 
-  static async updateInventoryImage(imageId: string, imageData: Partial<InventoryImageFormData>): Promise<InventoryImage> {
-    const response = await apiClient.put(`/inventory/images/${imageId}`, imageData);
-    return response.data;
+  static async updateInventoryImage(imageId: string, imageData: Partial<InventoryImageFormData>, vendorPhone?: string): Promise<InventoryImage> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.put(`/inventory/images/${imageId}`, imageData, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to update images. Only vendors can update images.');
+      }
+      throw error;
+    }
   }
 
-  static async deleteInventoryImage(imageId: string): Promise<void> {
-    await apiClient.delete(`/inventory/images/${imageId}`);
+  static async deleteInventoryImage(imageId: string, vendorPhone?: string): Promise<void> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      await apiClient.delete(`/inventory/images/${imageId}`, config);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to delete images. Only vendors can delete images.');
+      }
+      throw error;
+    }
   }
 
-  static async setPrimaryInventoryImage(imageId: string): Promise<InventoryImage> {
-    const response = await apiClient.put(`/inventory/images/${imageId}/primary`);
-    return response.data;
+  static async setPrimaryInventoryImage(imageId: string, vendorPhone?: string): Promise<InventoryImage> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.put(`/inventory/images/${imageId}/primary`, {}, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to set primary images. Only vendors can set primary images.');
+      }
+      throw error;
+    }
   }
 }
 

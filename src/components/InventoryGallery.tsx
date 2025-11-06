@@ -117,19 +117,41 @@ const InventoryGallery: React.FC<InventoryGalleryProps> = ({ inventory, open, on
             </Typography>
           </Box>
         ) : (
-          <Grid container spacing={2}>
+          <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} sx={{ padding: { xs: 1, sm: 2 } }}>
             {images.map((image) => (
               <Grid item xs={12} sm={6} md={4} lg={3} key={image.imageId}>
-                <Card sx={{ position: 'relative' }}>
+                <Card sx={{ 
+                  position: 'relative',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  borderRadius: 'clamp(8px, 1vw, 12px)',
+                  overflow: 'hidden',
+                  boxShadow: 2,
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4,
+                  }
+                }}>
                   <CardMedia
                     component="img"
-                    height="200"
+                    height="240"
                     image={image.imageUrl}
                     alt={image.imageName}
-                    sx={{ cursor: 'pointer' }}
+                    sx={{ 
+                      cursor: 'pointer',
+                      objectFit: 'cover',
+                      width: '100%',
+                      height: '240px',
+                      flexGrow: 1
+                    }}
                     onClick={() => setSelectedImage(image)}
                   />
-                  <CardContent sx={{ p: 1 }}>
+                  <CardContent sx={{ 
+                    p: { xs: 'clamp(8px, 1.5vw, 12px)', sm: 'clamp(12px, 2vw, 16px)' },
+                    flexGrow: 0
+                  }}>
                     <Box display="flex" justifyContent="space-between" alignItems="center">
                       <Typography variant="caption" noWrap>
                         {image.imageName}

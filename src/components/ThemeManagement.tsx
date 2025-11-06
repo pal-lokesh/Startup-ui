@@ -23,6 +23,7 @@ import ThemeService from '../services/themeService';
 import ThemeManagementForm from './ThemeManagementForm';
 import ThemeImages from './ThemeImages';
 import ThemeCard from './ThemeCard';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ThemeManagementProps {
   themes: Theme[];
@@ -43,6 +44,7 @@ const ThemeManagement: React.FC<ThemeManagementProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
   const [activeTab, setActiveTab] = useState(0);
+  const { user } = useAuth();
 
   const handleAddTheme = () => {
     setEditingTheme(null);
@@ -80,7 +82,7 @@ const ThemeManagement: React.FC<ThemeManagementProps> = ({
       setLoading(true);
       setError(null);
       
-      await ThemeService.deleteTheme(themeToDelete.themeId);
+      await ThemeService.deleteTheme(themeToDelete.themeId, user?.phoneNumber);
       
       // Remove theme from list
       const updatedThemes = themes.filter(theme => theme.themeId !== themeToDelete.themeId);

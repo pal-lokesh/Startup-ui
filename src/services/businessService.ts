@@ -93,6 +93,24 @@ export class BusinessService {
     const response = await apiClient.get(`/businesses/${businessId}/details`);
     return response.data;
   }
+
+  // Find nearby businesses
+  static async findNearbyBusinesses(
+    latitude: number,
+    longitude: number,
+    radiusKm: number = 10.0
+  ): Promise<{
+    latitude: number;
+    longitude: number;
+    radiusKm: number;
+    count: number;
+    businesses: Business[];
+  }> {
+    const response = await apiClient.get('/businesses/nearby', {
+      params: { latitude, longitude, radiusKm },
+    });
+    return response.data;
+  }
 }
 
 export default BusinessService;

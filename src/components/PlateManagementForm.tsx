@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { Plate, PlateFormData } from '../types';
 import PlateService from '../services/plateService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PlateManagementFormProps {
   open: boolean;
@@ -48,6 +49,7 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (open) {
@@ -139,11 +141,32 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
       let updatedPlate: Plate;
       
       if (plate) {
-        // Update existing plate
-        updatedPlate = await PlateService.updatePlate(plate.plateId, formData);
+        // Update existing plate - pass vendor phone for authorization
+        if (uploadedImage) {
+          setImageUploading(true);
+          try {
+            const dataUrl = await convertToBase64(uploadedImage);
+            updatedPlate = await PlateService.updatePlate(plate.plateId, {
+              ...formData,
+              plateImage: dataUrl,
+            }, user?.phoneNumber);
+          } catch (imageErr) {
+            console.error('Error uploading image:', imageErr);
+            // Fall back to updating without image change
+            updatedPlate = await PlateService.updatePlate(plate.plateId, formData, user?.phoneNumber);
+          } finally {
+            setImageUploading(false);
+          }
+        } else {
+          // Update without changing image - keep existing image
+          updatedPlate = await PlateService.updatePlate(plate.plateId, {
+            ...formData,
+            plateImage: formData.plateImage, // Preserve existing image
+          }, user?.phoneNumber);
+        }
       } else {
-        // Create new plate
-        updatedPlate = await PlateService.createPlate(formData);
+        // Create new plate - pass vendor phone for authorization
+        updatedPlate = await PlateService.createPlate(formData, user?.phoneNumber);
         
         // Upload image if one was selected
         if (uploadedImage) {
@@ -252,56 +275,73 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
             </Grid>
           </Grid>
 
-          {/* Image Upload Section - Only show for new plates */}
-          {!plate && (
-            <>
-              <Divider sx={{ my: 3 }} />
-              <Typography variant="h6" gutterBottom>
-                Upload Plate Image <span style={{ color: 'red' }}>*</span>
+          {/* Image Upload Section */}
+          <Divider sx={{ my: 3 }} />
+          <Typography variant="h6" gutterBottom>
+            {plate ? 'Update Plate Image' : 'Upload Plate Image'} {!plate && <span style={{ color: 'red' }}>*</span>}
+          </Typography>
+          {plate && formData.plateImage && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Current Image:
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                An image is required for the plate.
-              </Typography>
-              
-              <Box sx={{ mb: 2 }}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null;
-                    setUploadedImage(file);
-                  }}
-                  style={{ display: 'none' }}
-                  id="plate-image-upload"
-                />
-                <label htmlFor="plate-image-upload">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    fullWidth
-                    sx={{ mb: 2 }}
-                  >
-                    {uploadedImage ? `Selected: ${uploadedImage.name}` : 'Select Plate Image'}
-                  </Button>
-                </label>
-                
-                {uploadedImage && (
-                  <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Selected Image: {uploadedImage.name} ({(uploadedImage.size / 1024 / 1024).toFixed(2)} MB)
-                    </Typography>
-                    <Button
-                      size="small"
-                      color="error"
-                      onClick={() => setUploadedImage(null)}
-                    >
-                      Remove Image
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-            </>
+              <Box
+                component="img"
+                src={formData.plateImage}
+                alt="Current plate"
+                sx={{
+                  maxWidth: '200px',
+                  maxHeight: '200px',
+                  objectFit: 'cover',
+                  borderRadius: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  mb: 2
+                }}
+              />
+            </Box>
           )}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {plate ? 'Select a new image to update, or leave empty to keep the current image.' : 'An image is required for the plate.'}
+          </Typography>
+          
+          <Box sx={{ mb: 2 }}>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                setUploadedImage(file);
+              }}
+              style={{ display: 'none' }}
+              id="plate-image-upload"
+            />
+            <label htmlFor="plate-image-upload">
+              <Button
+                variant="outlined"
+                component="span"
+                fullWidth
+                sx={{ mb: 2 }}
+              >
+                {uploadedImage ? `Selected: ${uploadedImage.name}` : (plate ? 'Change Plate Image' : 'Select Plate Image')}
+              </Button>
+            </label>
+            
+            {uploadedImage && (
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  New Image: {uploadedImage.name} ({(uploadedImage.size / 1024 / 1024).toFixed(2)} MB)
+                </Typography>
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={() => setUploadedImage(null)}
+                >
+                  Remove Image
+                </Button>
+              </Box>
+            )}
+          </Box>
         </Box>
       </DialogContent>
       <DialogActions>

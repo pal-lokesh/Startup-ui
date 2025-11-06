@@ -26,6 +26,7 @@ import {
 import { Image } from '../types';
 import ImageService from '../services/imageService';
 import ImageUpload from './ImageUpload';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ThemeImagesProps {
   themeId: string;
@@ -39,6 +40,9 @@ const ThemeImages: React.FC<ThemeImagesProps> = ({ themeId, themeName }) => {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<Image | null>(null);
+  const { user } = useAuth();
+  
+  const isVendor = user && user.userType === 'VENDOR';
 
   useEffect(() => {
     fetchImages();
@@ -66,37 +70,24 @@ const ThemeImages: React.FC<ThemeImagesProps> = ({ themeId, themeName }) => {
     if (!imageToDelete) return;
 
     try {
-      await ImageService.deleteImage(imageToDelete.imageId);
+      await ImageService.deleteImage(imageToDelete.imageId, user?.phoneNumber);
       setImages(images.filter(img => img.imageId !== imageToDelete.imageId));
       setDeleteDialogOpen(false);
       setImageToDelete(null);
     } catch (err: any) {
-      setError('Failed to delete image');
+      setError(err.message || 'Failed to delete image');
       console.error('Error deleting image:', err);
     }
   };
 
   const handleSetPrimary = async (imageId: string) => {
     try {
-      // First, unset all other primary images for this theme
-      const otherImages = images.filter(img => img.imageId !== imageId);
-      for (const img of otherImages) {
-        if (img.isPrimary) {
-          await ImageService.updateImage(img.imageId, { ...img, isPrimary: false });
-        }
-      }
-
-      // Set the selected image as primary
-      const imageToUpdate = images.find(img => img.imageId === imageId);
-      if (imageToUpdate) {
-        await ImageService.updateImage(imageId, { ...imageToUpdate, isPrimary: true });
-        setImages(images.map(img => ({
-          ...img,
-          isPrimary: img.imageId === imageId
-        })));
-      }
+      // Use the dedicated setPrimaryImage endpoint which handles the logic
+      await ImageService.setPrimaryImage(imageId, user?.phoneNumber);
+      // Refresh images list
+      await fetchImages();
     } catch (err: any) {
-      setError('Failed to set primary image');
+      setError(err.message || 'Failed to set primary image');
       console.error('Error setting primary image:', err);
     }
   };
@@ -115,13 +106,16 @@ const ThemeImages: React.FC<ThemeImagesProps> = ({ themeId, themeName }) => {
         <Typography variant="h6">
           Theme Images ({images.length})
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setUploadDialogOpen(true)}
-        >
-          Add Images
-        </Button>
+        {/* Only show add images button for vendors */}
+        {isVendor && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setUploadDialogOpen(true)}
+          >
+            Add Images
+          </Button>
+        )}
       </Box>
 
       {error && (
@@ -138,28 +132,47 @@ const ThemeImages: React.FC<ThemeImagesProps> = ({ themeId, themeName }) => {
               No images uploaded yet
             </Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
-              Add images to showcase your theme to potential clients.
+              {isVendor ? 'Add images to showcase your theme to potential clients.' : 'No images available for this theme.'}
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => setUploadDialogOpen(true)}
-            >
-              Upload Images
-            </Button>
+            {isVendor && (
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setUploadDialogOpen(true)}
+              >
+                Upload Images
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <Grid container spacing={2}>
+        <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} sx={{ padding: { xs: 1, sm: 2 } }}>
           {images.map((image) => (
-            <Grid item xs={12} sm={6} md={4} key={image.imageId}>
-              <Card>
-                <Box position="relative">
+            <Grid item xs={12} sm={6} md={4} lg={3} key={image.imageId}>
+              <Card sx={{ 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column',
+                borderRadius: 'clamp(8px, 1vw, 12px)',
+                overflow: 'hidden',
+                boxShadow: 2,
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4,
+                }
+              }}>
+                <Box position="relative" sx={{ flexGrow: 1 }}>
                   <CardMedia
                     component="img"
-                    height="200"
+                    height="240"
                     image={image.imageUrl}
                     alt={image.imageName}
+                    sx={{ 
+                      objectFit: 'cover',
+                      width: '100%',
+                      height: '240px',
+                    }}
                   />
                   <Box
                     position="absolute"
@@ -178,32 +191,54 @@ const ThemeImages: React.FC<ThemeImagesProps> = ({ themeId, themeName }) => {
                     )}
                   </Box>
                 </Box>
-                <CardContent>
-                  <Typography variant="body2" noWrap>
+                <CardContent sx={{ 
+                  padding: { xs: 'clamp(8px, 1.5vw, 12px)', sm: 'clamp(12px, 2vw, 16px)' },
+                  flexGrow: 1,
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  <Typography variant="body2" noWrap sx={{ mb: 0.5, fontWeight: 500 }}>
                     {image.imageName}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
                     {(image.imageSize / 1024 / 1024).toFixed(2)} MB
                   </Typography>
-                  <Box display="flex" justifyContent="space-between" alignItems="center" mt={1}>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleSetPrimary(image.imageId)}
-                      color={image.isPrimary ? 'primary' : 'default'}
-                    >
-                      {image.isPrimary ? <StarIcon /> : <StarBorderIcon />}
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        setImageToDelete(image);
-                        setDeleteDialogOpen(true);
+                  {/* Only show edit buttons for vendors */}
+                  {isVendor && (
+                    <Box 
+                      display="flex" 
+                      justifyContent="space-between" 
+                      alignItems="center" 
+                      mt="auto"
+                      pt={1}
+                      sx={{
+                        borderTop: '1px solid',
+                        borderColor: 'divider'
                       }}
-                      color="error"
                     >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleSetPrimary(image.imageId)}
+                        color={image.isPrimary ? 'primary' : 'default'}
+                        title={image.isPrimary ? 'Primary Image' : 'Set as Primary'}
+                        sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
+                      >
+                        {image.isPrimary ? <StarIcon /> : <StarBorderIcon />}
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setImageToDelete(image);
+                          setDeleteDialogOpen(true);
+                        }}
+                        color="error"
+                        title="Delete Image"
+                        sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  )}
                 </CardContent>
               </Card>
             </Grid>

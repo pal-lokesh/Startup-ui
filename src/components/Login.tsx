@@ -38,7 +38,9 @@ const Login: React.FC = () => {
       const userData = await login(phoneNumber, password);
       // Use the returned user data directly for navigation
       navigate(
-        userData.userType === 'CLIENT' 
+        userData.role === 'SUPER_ADMIN'
+          ? '/super-admin-dashboard'
+          : userData.userType === 'CLIENT' 
           ? '/explore' 
           : userData.userType === 'VENDOR' 
           ? '/vendor-dashboard' 

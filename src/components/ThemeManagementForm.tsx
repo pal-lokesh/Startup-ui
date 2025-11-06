@@ -20,6 +20,7 @@ import {
 import { Theme, ThemeFormData, ImageFormData } from '../types';
 import ThemeService from '../services/themeService';
 import ImageService from '../services/imageService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ThemeManagementFormProps {
   open: boolean;
@@ -48,6 +49,7 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [imageUploading, setImageUploading] = useState(false);
+  const { user } = useAuth();
 
   const themeCategories = [
     'Wedding',
@@ -179,11 +181,11 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
       let updatedTheme: Theme;
       
       if (theme) {
-        // Update existing theme
-        updatedTheme = await ThemeService.updateTheme(theme.themeId, formData);
+        // Update existing theme - pass vendor phone for authorization
+        updatedTheme = await ThemeService.updateTheme(theme.themeId, formData, user?.phoneNumber);
       } else {
-        // Create new theme
-        updatedTheme = await ThemeService.createTheme(formData);
+        // Create new theme - pass vendor phone for authorization
+        updatedTheme = await ThemeService.createTheme(formData, user?.phoneNumber);
         
         // Upload images if any were selected
         if (uploadedImages.length > 0) {
@@ -199,7 +201,7 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
                 imageSize: file.size,
                 imageType: file.type,
               };
-              return await ImageService.createImage(imageData);
+              return await ImageService.createImage(imageData, user?.phoneNumber);
             });
             
             await Promise.all(uploadPromises);

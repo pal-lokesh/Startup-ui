@@ -139,7 +139,7 @@ const BusinessManagementForm: React.FC<BusinessManagementFormProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle>
         {business ? 'Edit Business Details' : 'Create Business Profile'}
       </DialogTitle>

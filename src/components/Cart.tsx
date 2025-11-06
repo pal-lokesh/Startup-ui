@@ -6,8 +6,6 @@ import {
   IconButton,
   List,
   ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
   Button,
   Divider,
   Chip,
@@ -19,10 +17,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -119,7 +113,7 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
         onClose={onClose}
         sx={{
           '& .MuiDrawer-paper': {
-            width: 400,
+            width: { xs: 'clamp(300px, 85vw, 400px)', sm: 'clamp(350px, 70vw, 450px)', md: 500 },
             maxWidth: '90vw',
           },
         }}
@@ -150,67 +144,118 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
               <List>
                 {cart.items.map((item, index) => (
                   <React.Fragment key={`${item.id}-${item.type}`}>
-                    <ListItem>
-                      <Avatar
-                        src={getItemImage(item)}
-                        sx={{ width: 60, height: 60, mr: 2 }}
-                      />
-                      <ListItemText
-                        primary={
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                              {item.name}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {item.businessName}
+                    <ListItem sx={{ flexDirection: 'column', alignItems: 'flex-start', py: 2 }}>
+                      <Box display="flex" width="100%" gap={2}>
+                        <Avatar
+                          src={getItemImage(item)}
+                          sx={{ width: 60, height: 60, flexShrink: 0 }}
+                        />
+                        <Box flex={1} minWidth={0}>
+                          <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                            {item.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                            {item.businessName}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            {item.description}
+                          </Typography>
+                          <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                            <Chip
+                              label={item.type.toUpperCase()}
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                            />
+                            <Typography variant="h6" color="primary">
+                              {formatPrice(item.price)} each
                             </Typography>
                           </Box>
-                        }
-                        secondary={
-                          <Box>
-                            <Typography variant="body2" color="text.secondary">
-                              {item.description}
-                            </Typography>
-                            <Box display="flex" alignItems="center" gap={1} mt={1}>
-                              <Chip
-                                label={item.type.toUpperCase()}
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                              />
-                              <Typography variant="h6" color="primary">
-                                {formatPrice(item.price)}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        }
-                      />
-                      <ListItemSecondaryAction>
+                        </Box>
+                      </Box>
+                      
+                      {/* Quantity and Delete Controls Below */}
+                      <Box 
+                        display="flex" 
+                        alignItems="center" 
+                        justifyContent="space-between" 
+                        width="100%" 
+                        mt={2}
+                        px={1}
+                        flexWrap="wrap"
+                        gap={2}
+                      >
                         <Box display="flex" alignItems="center" gap={1}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mr: 1, fontSize: 'clamp(0.75rem, 1.2vw, 0.875rem)' }}>
+                            Quantity:
+                          </Typography>
                           <IconButton
                             size="small"
                             onClick={() => handleQuantityChange(item.id, item.type, item.quantity - 1)}
+                            sx={{ 
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              '&:hover': {
+                                backgroundColor: 'action.hover',
+                              },
+                              width: { xs: 'clamp(28px, 3vw, 32px)', sm: 32 },
+                              height: { xs: 'clamp(28px, 3vw, 32px)', sm: 32 }
+                            }}
                           >
-                            <RemoveIcon />
+                            <RemoveIcon fontSize="small" />
                           </IconButton>
-                          <Typography variant="body2" sx={{ minWidth: 20, textAlign: 'center' }}>
+                          <Typography 
+                            variant="body1" 
+                            sx={{ 
+                              minWidth: 40, 
+                              textAlign: 'center',
+                              fontWeight: 'bold',
+                              fontSize: 'clamp(0.875rem, 1.5vw, 1rem)'
+                            }}
+                          >
                             {item.quantity}
                           </Typography>
                           <IconButton
                             size="small"
                             onClick={() => handleQuantityChange(item.id, item.type, item.quantity + 1)}
+                            sx={{ 
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              '&:hover': {
+                                backgroundColor: 'action.hover',
+                              },
+                              width: { xs: 'clamp(28px, 3vw, 32px)', sm: 32 },
+                              height: { xs: 'clamp(28px, 3vw, 32px)', sm: 32 }
+                            }}
                           >
-                            <AddIcon />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => removeFromCart(item.id, item.type)}
-                          >
-                            <DeleteIcon />
+                            <AddIcon fontSize="small" />
                           </IconButton>
                         </Box>
-                      </ListItemSecondaryAction>
+                        
+                        <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                          <Typography variant="body2" color="text.secondary" sx={{ mr: 1, fontSize: 'clamp(0.75rem, 1.2vw, 0.875rem)' }}>
+                            Subtotal:
+                          </Typography>
+                          <Typography variant="body1" fontWeight="bold" color="primary" sx={{ fontSize: 'clamp(0.875rem, 1.5vw, 1rem)' }}>
+                            {formatPrice(item.price * item.quantity)}
+                          </Typography>
+                          <IconButton
+                            size="medium"
+                            color="error"
+                            onClick={() => removeFromCart(item.id, item.type)}
+                            sx={{ 
+                              ml: 1,
+                              '&:hover': {
+                                backgroundColor: 'error.lighter',
+                              },
+                              width: { xs: 'clamp(36px, 4vw, 40px)', sm: 40 },
+                              height: { xs: 'clamp(36px, 4vw, 40px)', sm: 40 }
+                            }}
+                          >
+                            <DeleteIcon sx={{ fontSize: { xs: 'clamp(18px, 2.5vw, 20px)', sm: 20 } }} />
+                          </IconButton>
+                        </Box>
+                      </Box>
                     </ListItem>
                     {index < cart.items.length - 1 && <Divider />}
                   </React.Fragment>

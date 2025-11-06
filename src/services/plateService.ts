@@ -65,15 +65,23 @@ class PlateService {
     }
   }
 
-  async createPlate(plateData: PlateFormData): Promise<Plate> {
+  async createPlate(plateData: PlateFormData, vendorPhone?: string): Promise<Plate> {
     try {
+      const headers: HeadersInit = this.getAuthHeaders();
+      if (vendorPhone) {
+        (headers as any)['X-Vendor-Phone'] = vendorPhone;
+      }
+      
       const response = await fetch(API_BASE_URL, {
         method: 'POST',
-        headers: this.getAuthHeaders(),
+        headers: headers,
         body: JSON.stringify(plateData),
       });
 
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('You are not authorized to create products. Only vendors can create products.');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -84,15 +92,23 @@ class PlateService {
     }
   }
 
-  async updatePlate(plateId: string, plateData: PlateFormData): Promise<Plate> {
+  async updatePlate(plateId: string, plateData: PlateFormData, vendorPhone?: string): Promise<Plate> {
     try {
+      const headers: HeadersInit = this.getAuthHeaders();
+      if (vendorPhone) {
+        (headers as any)['X-Vendor-Phone'] = vendorPhone;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/${plateId}`, {
         method: 'PUT',
-        headers: this.getAuthHeaders(),
+        headers: headers,
         body: JSON.stringify(plateData),
       });
 
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('You are not authorized to update this product. You can only update your own products.');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -103,14 +119,22 @@ class PlateService {
     }
   }
 
-  async deletePlate(plateId: string): Promise<void> {
+  async deletePlate(plateId: string, vendorPhone?: string): Promise<void> {
     try {
+      const headers: HeadersInit = this.getAuthHeaders();
+      if (vendorPhone) {
+        (headers as any)['X-Vendor-Phone'] = vendorPhone;
+      }
+      
       const response = await fetch(`${API_BASE_URL}/${plateId}`, {
         method: 'DELETE',
-        headers: this.getAuthHeaders(),
+        headers: headers,
       });
 
       if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('You are not authorized to delete this product. Only vendors can delete their own products.');
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
     } catch (error) {

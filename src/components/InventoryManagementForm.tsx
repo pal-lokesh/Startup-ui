@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { Inventory, InventoryFormData, InventoryImageFormData } from '../types';
 import InventoryService from '../services/inventoryService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface InventoryManagementFormProps {
   open: boolean;
@@ -51,6 +52,7 @@ const InventoryManagementForm: React.FC<InventoryManagementFormProps> = ({
   const [imageUploading, setImageUploading] = useState(false);
   const [customCategory, setCustomCategory] = useState<string>('');
   const [showCustomCategory, setShowCustomCategory] = useState<boolean>(false);
+  const { user } = useAuth();
 
   const inventoryCategories = [
     'chair',
@@ -204,11 +206,11 @@ const InventoryManagementForm: React.FC<InventoryManagementFormProps> = ({
       setError(null);
 
       if (inventory) {
-        // Update existing inventory
-        await InventoryService.updateInventory(inventory.inventoryId, formData);
+        // Update existing inventory - pass vendor phone for authorization
+        await InventoryService.updateInventory(inventory.inventoryId, formData, user?.phoneNumber);
       } else {
-        // Create new inventory
-        const newInventory = await InventoryService.createInventory(formData);
+        // Create new inventory - pass vendor phone for authorization
+        const newInventory = await InventoryService.createInventory(formData, user?.phoneNumber);
         
         // Upload images if any were selected
         if (uploadedImages.length > 0) {
@@ -224,7 +226,7 @@ const InventoryManagementForm: React.FC<InventoryManagementFormProps> = ({
                 imageSize: file.size,
                 imageType: file.type,
               };
-              return await InventoryService.createInventoryImage(imageData);
+              return await InventoryService.createInventoryImage(imageData, user?.phoneNumber);
             });
             
             await Promise.all(uploadPromises);

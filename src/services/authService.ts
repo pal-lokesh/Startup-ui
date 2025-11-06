@@ -30,9 +30,12 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Token is invalid or expired, clear storage
+      AuthService.logout();
+      // Only redirect if not already on login page
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -44,9 +47,10 @@ export class AuthService {
     const response = await apiClient.post('/auth/signin', loginData);
     const jwtResponse = response.data;
     
-    // Store token and user data in localStorage
+    // Store token and user data in localStorage (persists across sessions)
     localStorage.setItem('token', jwtResponse.token);
     localStorage.setItem('user', JSON.stringify({
+      userId: jwtResponse.userId,
       phoneNumber: jwtResponse.phoneNumber,
       email: jwtResponse.email,
       firstName: jwtResponse.firstName,
@@ -89,6 +93,46 @@ export class AuthService {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
     return !!(token && user);
+  }
+
+  // Validate token by checking if it's expired
+  static isTokenValid(token: string): boolean {
+    try {
+      // Decode JWT token to check expiration
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const decoded = JSON.parse(jsonPayload);
+      
+      // Check if token is expired
+      if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+        return false; // Token is expired
+      }
+      return true; // Token is valid
+    } catch (error) {
+      console.error('Error validating token:', error);
+      return false; // Invalid token format
+    }
+  }
+
+  // Validate current stored token
+  static validateStoredToken(): boolean {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      return false;
+    }
+    
+    const isValid = this.isTokenValid(token);
+    if (!isValid) {
+      // Clear invalid token
+      this.logout();
+    }
+    return isValid;
   }
 
   // Check if phone number exists

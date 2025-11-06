@@ -11,6 +11,9 @@ interface CartContextType {
   getCartItemCount: () => number;
   getCartTotal: () => number;
   isInCart: (itemId: string, itemType: 'theme' | 'inventory' | 'plate') => boolean;
+  openCart: () => void;
+  closeCart: () => void;
+  isCartOpen: boolean;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -74,6 +77,7 @@ interface CartProviderProps {
 
 export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(cartReducer, { items: [] });
+  const [isCartOpen, setIsCartOpen] = React.useState(false);
 
   const addToCart = (item: Theme | Inventory | Plate, business: Business) => {
     let cartItem: CartItem;
@@ -157,6 +161,14 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     return state.items.some(item => item.id === itemId && item.type === itemType);
   };
 
+  const openCart = () => {
+    setIsCartOpen(true);
+  };
+
+  const closeCart = () => {
+    setIsCartOpen(false);
+  };
+
   const cart: Cart = {
     items: state.items,
     totalItems: getCartItemCount(),
@@ -172,7 +184,10 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     clearCart,
     getCartItemCount,
     getCartTotal,
-    isInCart
+    isInCart,
+    openCart,
+    closeCart,
+    isCartOpen
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

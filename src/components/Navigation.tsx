@@ -32,6 +32,7 @@ import {
   Explore as ExploreIcon,
   Chat as ChatIcon,
   Notifications as NotificationIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -39,14 +40,14 @@ import Cart from './Cart';
 import notificationService from '../services/notificationService';
 import chatService from '../services/chatService';
 
-const drawerWidth = 240;
+// Responsive drawer width - scales with viewport
+// Note: drawerWidth constant removed as we now use clamp() directly in sx props
 
 const Navigation: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { getCartItemCount } = useCart();
-  const [cartOpen, setCartOpen] = React.useState(false);
+  const { getCartItemCount, isCartOpen, openCart, closeCart } = useCart();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [notificationCount, setNotificationCount] = React.useState(0);
@@ -119,6 +120,7 @@ const Navigation: React.FC = () => {
       icon: <ChatIcon />, 
       path: '/client-chat' 
     },
+    { text: 'My Ratings', icon: <StarIcon />, path: '/client-ratings' },
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
 
@@ -185,8 +187,8 @@ const Navigation: React.FC = () => {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
+          width: { sm: `calc(100% - clamp(240px, 30vw, 280px))` },
+          ml: { sm: 'clamp(240px, 30vw, 280px)' },
         }}
       >
         <Toolbar>
@@ -199,7 +201,15 @@ const Navigation: React.FC = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+          <Typography 
+            variant="h6" 
+            noWrap 
+            component="div" 
+            sx={{ 
+              flexGrow: 1,
+              fontSize: { xs: 'clamp(0.875rem, 3vw, 1rem)', sm: 'clamp(1rem, 2vw, 1.25rem)' }
+            }}
+          >
             User Management System
           </Typography>
           {user && (
@@ -208,7 +218,7 @@ const Navigation: React.FC = () => {
               {user.userType === 'CLIENT' && (
                 <IconButton
                   color="inherit"
-                  onClick={() => setCartOpen(true)}
+                  onClick={openCart}
                   sx={{ mr: 1 }}
                 >
                   <CartIcon />
@@ -297,7 +307,14 @@ const Navigation: React.FC = () => {
                   </Box>
                 )}
               </IconButton>
-              <Typography variant="body2" sx={{ mr: 2 }}>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  mr: { xs: 1, sm: 2 },
+                  fontSize: { xs: 'clamp(0.75rem, 2vw, 0.875rem)', sm: 'clamp(0.875rem, 1.5vw, 1rem)' },
+                  display: { xs: 'none', sm: 'block' }
+                }}
+              >
                 Welcome, {user.firstName}
               </Typography>
               <IconButton
@@ -309,9 +326,13 @@ const Navigation: React.FC = () => {
                 onClick={handleUserMenuOpen}
                 color="inherit"
               >
-                <Avatar sx={{ width: 32, height: 32 }}>
-                  {user.firstName.charAt(0).toUpperCase()}
-                </Avatar>
+              <Avatar sx={{ 
+                width: { xs: 'clamp(28px, 4vw, 32px)', sm: 'clamp(32px, 4vw, 40px)' },
+                height: { xs: 'clamp(28px, 4vw, 32px)', sm: 'clamp(32px, 4vw, 40px)' },
+                fontSize: { xs: 'clamp(0.875rem, 2vw, 1rem)', sm: 'clamp(1rem, 2vw, 1.25rem)' }
+              }}>
+                {user.firstName.charAt(0).toUpperCase()}
+              </Avatar>
               </IconButton>
               <Menu
                 id="user-menu"
@@ -352,7 +373,10 @@ const Navigation: React.FC = () => {
       </AppBar>
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{ 
+          width: { sm: 'clamp(240px, 30vw, 280px)' }, 
+          flexShrink: { sm: 0 } 
+        }}
       >
         <Drawer
           variant="temporary"
@@ -363,7 +387,11 @@ const Navigation: React.FC = () => {
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: 'clamp(240px, 70vw, 280px)',
+              padding: 'clamp(0.5rem, 1vw, 1rem)'
+            },
           }}
         >
           {drawer}
@@ -372,14 +400,18 @@ const Navigation: React.FC = () => {
           variant="permanent"
           sx={{
             display: { xs: 'none', sm: 'block' },
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: 'clamp(240px, 30vw, 280px)',
+              padding: 'clamp(0.5rem, 1vw, 1rem)'
+            },
           }}
           open
         >
           {drawer}
         </Drawer>
       </Box>
-      <Cart open={cartOpen} onClose={() => setCartOpen(false)} />
+      <Cart open={isCartOpen} onClose={closeCart} />
     </>
   );
 };

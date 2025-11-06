@@ -25,6 +25,7 @@ import {
 import { Inventory, InventoryImage } from '../types';
 import InventoryService from '../services/inventoryService';
 import ImageUpload from './ImageUpload';
+import { useAuth } from '../contexts/AuthContext';
 
 interface InventoryImagesProps {
   open: boolean;
@@ -36,6 +37,9 @@ const InventoryImages: React.FC<InventoryImagesProps> = ({ open, onClose, invent
   const [images, setImages] = useState<InventoryImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+  
+  const isVendor = user && user.userType === 'VENDOR';
 
   const fetchImages = useCallback(async () => {
     if (!inventory) return;
@@ -61,10 +65,10 @@ const InventoryImages: React.FC<InventoryImagesProps> = ({ open, onClose, invent
 
   const handleSetPrimary = async (imageId: string) => {
     try {
-      await InventoryService.setPrimaryInventoryImage(imageId);
+      await InventoryService.setPrimaryInventoryImage(imageId, user?.phoneNumber);
       await fetchImages(); // Refresh the list
     } catch (err: any) {
-      setError('Failed to set primary image');
+      setError(err.message || 'Failed to set primary image');
       console.error('Error setting primary image:', err);
     }
   };
@@ -75,10 +79,10 @@ const InventoryImages: React.FC<InventoryImagesProps> = ({ open, onClose, invent
     }
 
     try {
-      await InventoryService.deleteInventoryImage(imageId);
+      await InventoryService.deleteInventoryImage(imageId, user?.phoneNumber);
       await fetchImages(); // Refresh the list
     } catch (err: any) {
-      setError('Failed to delete image');
+      setError(err.message || 'Failed to delete image');
       console.error('Error deleting image:', err);
     }
   };
@@ -114,15 +118,17 @@ const InventoryImages: React.FC<InventoryImagesProps> = ({ open, onClose, invent
           </Alert>
         )}
 
-        {/* Image Upload Section */}
-        <Box sx={{ mb: 3 }}>
-          <ImageUpload
-            themeId={inventory.inventoryId}
-            themeName={inventory.inventoryName}
-            onUploadSuccess={handleImageUploadSuccess}
-            uploadType="inventory"
-          />
-        </Box>
+        {/* Image Upload Section - Only show for vendors */}
+        {isVendor && (
+          <Box sx={{ mb: 3 }}>
+            <ImageUpload
+              themeId={inventory.inventoryId}
+              themeName={inventory.inventoryName}
+              onUploadSuccess={handleImageUploadSuccess}
+              uploadType="inventory"
+            />
+          </Box>
+        )}
 
         {/* Images Grid */}
         {loading ? (
@@ -139,17 +145,37 @@ const InventoryImages: React.FC<InventoryImagesProps> = ({ open, onClose, invent
             </Typography>
           </Box>
         ) : (
-          <Grid container spacing={2}>
+          <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} sx={{ padding: { xs: 1, sm: 2 } }}>
             {images.map((image) => (
-              <Grid item xs={12} sm={6} md={4} key={image.imageId}>
-                <Card>
-                  <Box sx={{ position: 'relative' }}>
+              <Grid item xs={12} sm={6} md={4} lg={3} key={image.imageId}>
+                <Card sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  borderRadius: 'clamp(8px, 1vw, 12px)',
+                  overflow: 'hidden',
+                  boxShadow: 2,
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4,
+                  }
+                }}>
+                  <Box sx={{ 
+                    position: 'relative',
+                    flexGrow: 1,
+                    minHeight: '240px'
+                  }}>
                     <CardMedia
                       component="img"
-                      height="200"
+                      height="240"
                       image={image.imageUrl}
                       alt={image.imageName}
-                      sx={{ objectFit: 'cover' }}
+                      sx={{ 
+                        objectFit: 'cover',
+                        width: '100%',
+                        height: '240px',
+                      }}
                     />
                     
                     {/* Primary Badge */}
@@ -166,49 +192,58 @@ const InventoryImages: React.FC<InventoryImagesProps> = ({ open, onClose, invent
                       />
                     )}
                     
-                    {/* Action Buttons */}
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        display: 'flex',
-                        gap: 0.5,
-                      }}
-                    >
-                      <IconButton
-                        size="small"
-                        onClick={() => handleSetPrimary(image.imageId)}
+                    {/* Action Buttons - Only show for vendors */}
+                    {isVendor && (
+                      <Box
                         sx={{
-                          bgcolor: 'rgba(255,255,255,0.8)',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          display: 'flex',
+                          gap: 0.5,
                         }}
                       >
-                        {image.isPrimary ? (
-                          <StarIcon color="primary" />
-                        ) : (
-                          <StarBorderIcon />
-                        )}
-                      </IconButton>
-                      
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteImage(image.imageId)}
-                        sx={{
-                          bgcolor: 'rgba(255,255,255,0.8)',
-                          '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
-                        }}
-                      >
-                        <DeleteIcon color="error" />
-                      </IconButton>
-                    </Box>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleSetPrimary(image.imageId)}
+                          sx={{
+                            bgcolor: 'rgba(255,255,255,0.8)',
+                            '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
+                          }}
+                          title={image.isPrimary ? 'Primary Image' : 'Set as Primary'}
+                        >
+                          {image.isPrimary ? (
+                            <StarIcon color="primary" />
+                          ) : (
+                            <StarBorderIcon />
+                          )}
+                        </IconButton>
+                        
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDeleteImage(image.imageId)}
+                          sx={{
+                            bgcolor: 'rgba(255,255,255,0.8)',
+                            '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' },
+                          }}
+                          title="Delete Image"
+                        >
+                          <DeleteIcon color="error" />
+                        </IconButton>
+                      </Box>
+                    )}
                   </Box>
                   
-                  <CardContent>
-                    <Typography variant="body2" noWrap>
+                  <CardContent sx={{ 
+                    padding: { xs: 'clamp(8px, 1.5vw, 12px)', sm: 'clamp(12px, 2vw, 16px)' },
+                    flexGrow: 1,
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <Typography variant="body2" noWrap sx={{ mb: 0.5, fontWeight: 500 }}>
                       {image.imageName}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
                       {(image.imageSize / 1024).toFixed(1)} KB
                     </Typography>
                   </CardContent>

@@ -39,6 +39,18 @@ import PlateCard from '../components/PlateCard';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { calculateDistance, formatDistance, isValidCoordinates } from '../utils/distanceUtils';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import MyLocationIcon from '@mui/icons-material/MyLocation';
+import { parsePriceRange, getAveragePrice, isWithinBudget, formatPrice } from '../utils/priceUtils';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import StarIcon from '@mui/icons-material/Star';
+import { ratingService } from '../services/ratingService';
+import { RatingStats } from '../types/rating';
+
+type LocationFilter = 'all' | 'nearby' | 'custom';
+type BudgetFilter = 'all' | 'under5k' | '5k-10k' | '10k-25k' | '25k-50k' | '50k-100k' | 'above100k' | 'custom';
+type SortOrder = 'price-low' | 'price-high' | 'rating-high' | 'rating-low' | 'default';
 
 const ClientExplore: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
@@ -55,12 +67,38 @@ const ClientExplore: React.FC = () => {
   const [businessPlates, setBusinessPlates] = useState<{[key: string]: Plate[]}>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [chatLoading, setChatLoading] = useState<{[key: string]: boolean}>({});
+  
+  // Location-based filtering state
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>('nearby'); // Default to nearby
+  const [customRadius, setCustomRadius] = useState<number>(10);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [businessDistances, setBusinessDistances] = useState<{[key: string]: number}>({});
+  const [locationRequested, setLocationRequested] = useState(false); // Track if location was requested
+  
+  // Budget-based filtering state
+  const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>('all');
+  const [customMinBudget, setCustomMinBudget] = useState<number>(0);
+  const [customMaxBudget, setCustomMaxBudget] = useState<number>(100000);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('default');
+  
+  // Rating stats state
+  const [themeRatingStats, setThemeRatingStats] = useState<{[key: string]: RatingStats}>({});
+  const [inventoryRatingStats, setInventoryRatingStats] = useState<{[key: string]: RatingStats}>({});
+  const [plateRatingStats, setPlateRatingStats] = useState<{[key: string]: RatingStats}>({});
+  const [ratingStatsLoading, setRatingStatsLoading] = useState(false);
+  
   const { addToCart } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
+    // Automatically request location once on page load
+    if (!locationRequested && navigator.geolocation) {
+      getCurrentLocation(false); // false = automatic request
+      setLocationRequested(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -68,6 +106,16 @@ const ClientExplore: React.FC = () => {
       fetchData();
     }
   }, [selectedCategory]);
+
+  useEffect(() => {
+    if (userLocation && locationFilter !== 'all') {
+      calculateDistances();
+    }
+  }, [userLocation, locationFilter, customRadius, businesses]);
+
+  useEffect(() => {
+    loadRatingStats();
+  }, [themes, inventory, plates]);
 
   const fetchData = async () => {
     try {
@@ -125,6 +173,60 @@ const ClientExplore: React.FC = () => {
     }
   };
 
+  // Load rating stats for all items
+  const loadRatingStats = async () => {
+    if (themes.length === 0 && inventory.length === 0 && plates.length === 0) return;
+    
+    try {
+      setRatingStatsLoading(true);
+      const themeStatsPromises = themes.map(theme =>
+        ratingService.getRatingStats(theme.themeId, 'THEME').catch(() => null)
+      );
+      const inventoryStatsPromises = inventory.map(item =>
+        ratingService.getRatingStats(item.inventoryId, 'INVENTORY').catch(() => null)
+      );
+      const plateStatsPromises = plates.map(plate =>
+        ratingService.getRatingStats(plate.plateId, 'PLATE').catch(() => null)
+      );
+
+      const [themeStatsResults, inventoryStatsResults, plateStatsResults] = await Promise.all([
+        Promise.all(themeStatsPromises),
+        Promise.all(inventoryStatsPromises),
+        Promise.all(plateStatsPromises)
+      ]);
+
+      // Build rating stats maps
+      const themeStatsMap: {[key: string]: RatingStats} = {};
+      themes.forEach((theme, index) => {
+        if (themeStatsResults[index]) {
+          themeStatsMap[theme.themeId] = themeStatsResults[index]!;
+        }
+      });
+
+      const inventoryStatsMap: {[key: string]: RatingStats} = {};
+      inventory.forEach((item, index) => {
+        if (inventoryStatsResults[index]) {
+          inventoryStatsMap[item.inventoryId] = inventoryStatsResults[index]!;
+        }
+      });
+
+      const plateStatsMap: {[key: string]: RatingStats} = {};
+      plates.forEach((plate, index) => {
+        if (plateStatsResults[index]) {
+          plateStatsMap[plate.plateId] = plateStatsResults[index]!;
+        }
+      });
+
+      setThemeRatingStats(themeStatsMap);
+      setInventoryRatingStats(inventoryStatsMap);
+      setPlateRatingStats(plateStatsMap);
+    } catch (err) {
+      console.error('Error loading rating stats:', err);
+    } finally {
+      setRatingStatsLoading(false);
+    }
+  };
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
     setRefreshKey(Date.now());
@@ -170,20 +272,264 @@ const ClientExplore: React.FC = () => {
     setFilteredBusinesses(filtered);
   };
 
+  // Get user's current location
+  const getCurrentLocation = (isManual: boolean = true) => {
+    if (!navigator.geolocation) {
+      console.warn('Geolocation is not supported by your browser');
+      // If geolocation not supported, keep location filter as 'all'
+      setLocationFilter('all');
+      if (isManual) {
+        alert('Geolocation is not supported by your browser');
+      }
+      return;
+    }
+
+    setLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ lat: latitude, lon: longitude });
+        setLocationLoading(false);
+        // Set to nearby filter if location is successfully obtained
+        if (locationFilter === 'all') {
+          setLocationFilter('nearby');
+        }
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        // If location access denied or failed, fall back to 'all' filter
+        setLocationFilter('all');
+        setLocationLoading(false);
+        // Only show alert on manual request, not on automatic request
+        if (isManual) {
+          alert('Unable to get your location. Please enable location permissions.');
+        }
+      }
+    );
+  };
+
+  // Calculate distances from user location to all businesses
+  const calculateDistances = () => {
+    if (!userLocation) return;
+
+    const distances: {[key: string]: number} = {};
+    businesses.forEach(business => {
+      if (business.latitude && business.longitude) {
+        const distance = calculateDistance(
+          userLocation.lat,
+          userLocation.lon,
+          business.latitude,
+          business.longitude
+        );
+        distances[business.businessId] = distance;
+      }
+    });
+    setBusinessDistances(distances);
+  };
+
+  // Sort businesses by distance
+  const sortBusinessesByDistance = (businessList: Business[]): Business[] => {
+    if (locationFilter === 'all' || !userLocation) {
+      return businessList;
+    }
+
+    const radius = locationFilter === 'nearby' ? 5 : customRadius;
+    
+    return businessList
+      .filter(business => {
+        if (!business.latitude || !business.longitude) return false;
+        const distance = businessDistances[business.businessId];
+        return distance !== undefined && distance <= radius;
+      })
+      .sort((a, b) => {
+        const distA = businessDistances[a.businessId] || Infinity;
+        const distB = businessDistances[b.businessId] || Infinity;
+        return distA - distB;
+      });
+  };
+
+  // Sort themes/plates by business distance
+  const sortItemsByDistance = <T extends { businessId: string }>(
+    items: T[]
+  ): T[] => {
+    if (locationFilter === 'all' || !userLocation) {
+      return items;
+    }
+
+    const radius = locationFilter === 'nearby' ? 5 : customRadius;
+
+    return items
+      .filter(item => {
+        const business = businesses.find(b => b.businessId === item.businessId);
+        if (!business || !business.latitude || !business.longitude) return false;
+        const distance = businessDistances[business.businessId];
+        return distance !== undefined && distance <= radius;
+      })
+      .sort((a, b) => {
+        const distA = businessDistances[a.businessId] || Infinity;
+        const distB = businessDistances[b.businessId] || Infinity;
+        return distA - distB;
+      });
+  };
+
+  const handleLocationFilterChange = (filter: LocationFilter) => {
+    setLocationFilter(filter);
+    if (filter !== 'all' && !userLocation) {
+      getCurrentLocation(true); // true = manual request
+    }
+  };
+
+  // Get budget range based on filter
+  const getBudgetRange = (): { min: number; max: number } => {
+    switch (budgetFilter) {
+      case 'under5k':
+        return { min: 0, max: 5000 };
+      case '5k-10k':
+        return { min: 5000, max: 10000 };
+      case '10k-25k':
+        return { min: 10000, max: 25000 };
+      case '25k-50k':
+        return { min: 25000, max: 50000 };
+      case '50k-100k':
+        return { min: 50000, max: 100000 };
+      case 'above100k':
+        return { min: 100000, max: Infinity };
+      case 'custom':
+        return { min: customMinBudget, max: customMaxBudget };
+      default:
+        return { min: 0, max: Infinity };
+    }
+  };
+
+  // Get average rating for a theme
+  const getThemeRating = (themeId: string): number => {
+    const stats = themeRatingStats[themeId];
+    return stats?.averageRating || 0;
+  };
+
+  // Get average rating for inventory
+  const getInventoryRating = (inventoryId: string): number => {
+    const stats = inventoryRatingStats[inventoryId];
+    return stats?.averageRating || 0;
+  };
+
+  // Get average rating for plate
+  const getPlateRating = (plateId: string): number => {
+    const stats = plateRatingStats[plateId];
+    return stats?.averageRating || 0;
+  };
+
+  // Filter and sort themes by budget and rating
+  const filterAndSortThemes = (themeList: Theme[]): Theme[] => {
+    const budgetRange = getBudgetRange();
+    
+    let filtered = themeList.filter(theme => {
+      return isWithinBudget(undefined, theme.priceRange, budgetRange.min, budgetRange.max);
+    });
+
+    if (sortOrder === 'price-low') {
+      filtered.sort((a, b) => {
+        const avgA = getAveragePrice(a.priceRange);
+        const avgB = getAveragePrice(b.priceRange);
+        return avgA - avgB;
+      });
+    } else if (sortOrder === 'price-high') {
+      filtered.sort((a, b) => {
+        const avgA = getAveragePrice(a.priceRange);
+        const avgB = getAveragePrice(b.priceRange);
+        return avgB - avgA;
+      });
+    } else if (sortOrder === 'rating-high') {
+      filtered.sort((a, b) => {
+        const ratingA = getThemeRating(a.themeId);
+        const ratingB = getThemeRating(b.themeId);
+        return ratingB - ratingA; // High to low
+      });
+    } else if (sortOrder === 'rating-low') {
+      filtered.sort((a, b) => {
+        const ratingA = getThemeRating(a.themeId);
+        const ratingB = getThemeRating(b.themeId);
+        return ratingA - ratingB; // Low to high
+      });
+    }
+
+    return filtered;
+  };
+
+  // Filter and sort inventory by budget and rating
+  const filterAndSortInventory = (inventoryList: Inventory[]): Inventory[] => {
+    const budgetRange = getBudgetRange();
+    
+    let filtered = inventoryList.filter(item => {
+      return isWithinBudget(item.price, undefined, budgetRange.min, budgetRange.max);
+    });
+
+    if (sortOrder === 'price-low') {
+      filtered.sort((a, b) => a.price - b.price);
+    } else if (sortOrder === 'price-high') {
+      filtered.sort((a, b) => b.price - a.price);
+    } else if (sortOrder === 'rating-high') {
+      filtered.sort((a, b) => {
+        const ratingA = getInventoryRating(a.inventoryId);
+        const ratingB = getInventoryRating(b.inventoryId);
+        return ratingB - ratingA; // High to low
+      });
+    } else if (sortOrder === 'rating-low') {
+      filtered.sort((a, b) => {
+        const ratingA = getInventoryRating(a.inventoryId);
+        const ratingB = getInventoryRating(b.inventoryId);
+        return ratingA - ratingB; // Low to high
+      });
+    }
+
+    return filtered;
+  };
+
+  // Filter and sort plates by budget and rating
+  const filterAndSortPlates = (plateList: Plate[]): Plate[] => {
+    const budgetRange = getBudgetRange();
+    
+    let filtered = plateList.filter(plate => {
+      return isWithinBudget(plate.price, undefined, budgetRange.min, budgetRange.max);
+    });
+
+    if (sortOrder === 'price-low') {
+      filtered.sort((a, b) => a.price - b.price);
+    } else if (sortOrder === 'price-high') {
+      filtered.sort((a, b) => b.price - a.price);
+    } else if (sortOrder === 'rating-high') {
+      filtered.sort((a, b) => {
+        const ratingA = getPlateRating(a.plateId);
+        const ratingB = getPlateRating(b.plateId);
+        return ratingB - ratingA; // High to low
+      });
+    } else if (sortOrder === 'rating-low') {
+      filtered.sort((a, b) => {
+        const ratingA = getPlateRating(a.plateId);
+        const ratingB = getPlateRating(b.plateId);
+        return ratingA - ratingB; // Low to high
+      });
+    }
+
+    return filtered;
+  };
+
   // Buy Now handlers
+  // Note: The card components handle adding to cart and opening cart.
+  // These handlers can be used for additional logic like notifications or analytics.
   const handleThemeBuyNow = (theme: Theme, business: Business) => {
-    addToCart(theme, business);
-    // You can add additional logic here like opening cart or showing a success message
+    // Item is already added to cart by the card component
+    // You can add additional logic here like showing a success message
   };
 
   const handleInventoryBuyNow = (inventory: Inventory, business: Business) => {
-    addToCart(inventory, business);
-    // You can add additional logic here like opening cart or showing a success message
+    // Item is already added to cart by the card component
+    // You can add additional logic here like showing a success message
   };
 
   const handlePlateBuyNow = (plate: Plate, business: Business) => {
-    addToCart(plate, business);
-    // You can add additional logic here like opening cart or showing a success message
+    // Item is already added to cart by the card component
+    // You can add additional logic here like showing a success message
   };
 
   const handleStartChat = async (business: Business) => {
@@ -285,17 +631,269 @@ const ClientExplore: React.FC = () => {
         </ToggleButtonGroup>
       </Paper>
 
+      {/* Location Filter */}
+      <Paper sx={{ p: 3, mb: 4, background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+          <Typography variant="h6" sx={{ color: 'white' }}>
+            Filter by Location
+          </Typography>
+          {!userLocation && (
+            <Button
+              variant="contained"
+              startIcon={locationLoading ? <CircularProgress size={16} color="inherit" /> : <MyLocationIcon />}
+              onClick={() => getCurrentLocation(true)}
+              disabled={locationLoading}
+              sx={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.3)',
+                },
+              }}
+            >
+              {locationLoading ? 'Getting Location...' : 'Use My Location'}
+            </Button>
+          )}
+          {userLocation && (
+            <Chip
+              icon={<LocationOnIcon />}
+              label={`Location: ${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`}
+              sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white' }}
+            />
+          )}
+        </Box>
+        <ToggleButtonGroup
+          value={locationFilter}
+          exclusive
+          onChange={(e, value) => value !== null && handleLocationFilterChange(value)}
+          aria-label="location filter"
+          sx={{
+            '& .MuiToggleButton-root': {
+              color: 'white',
+              borderColor: 'rgba(255,255,255,0.3)',
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              },
+              '&.Mui-selected': {
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.3)',
+                },
+              },
+            },
+          }}
+        >
+          <ToggleButton value="all" aria-label="all locations">
+            <LocationOnIcon sx={{ mr: 1 }} />
+            All Locations
+          </ToggleButton>
+          <ToggleButton value="nearby" aria-label="nearby 5km">
+            <LocationOnIcon sx={{ mr: 1 }} />
+            Nearby (5km)
+          </ToggleButton>
+          <ToggleButton value="custom" aria-label="custom radius">
+            <LocationOnIcon sx={{ mr: 1 }} />
+            Within {customRadius}km
+          </ToggleButton>
+        </ToggleButtonGroup>
+        {locationFilter === 'custom' && (
+          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" sx={{ color: 'white' }}>
+              Radius:
+            </Typography>
+            <input
+              type="range"
+              min="1"
+              max="50"
+              value={customRadius}
+              onChange={(e) => setCustomRadius(Number(e.target.value))}
+              style={{ flex: 1, maxWidth: '300px' }}
+            />
+            <Typography variant="body2" sx={{ color: 'white', minWidth: '50px' }}>
+              {customRadius}km
+            </Typography>
+          </Box>
+        )}
+      </Paper>
+
+      {/* Budget Filter */}
+      <Paper sx={{ p: 3, mb: 4, background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+          <Typography variant="h6" sx={{ color: 'white' }}>
+            Filter by Budget
+          </Typography>
+          <ToggleButtonGroup
+            value={sortOrder}
+            exclusive
+            onChange={(e, value) => value !== null && setSortOrder(value)}
+            aria-label="sort order"
+            size="small"
+            sx={{
+              flexWrap: 'wrap',
+              gap: 1,
+              '& .MuiToggleButton-root': {
+                color: 'white',
+                borderColor: 'rgba(255,255,255,0.3)',
+                mb: 1,
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                },
+                '&.Mui-selected': {
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255,255,255,0.3)',
+                  },
+                },
+              },
+            }}
+          >
+            <ToggleButton value="default" aria-label="default sort">
+              Default
+            </ToggleButton>
+            <ToggleButton value="price-low" aria-label="price low to high">
+              <AttachMoneyIcon sx={{ mr: 0.5, fontSize: 'small' }} />
+              Price: Low to High
+            </ToggleButton>
+            <ToggleButton value="price-high" aria-label="price high to low">
+              <AttachMoneyIcon sx={{ mr: 0.5, fontSize: 'small' }} />
+              Price: High to Low
+            </ToggleButton>
+            <ToggleButton value="rating-high" aria-label="rating high to low">
+              <StarIcon sx={{ mr: 0.5, fontSize: 'small' }} />
+              Rating: High to Low
+            </ToggleButton>
+            <ToggleButton value="rating-low" aria-label="rating low to high">
+              <StarIcon sx={{ mr: 0.5, fontSize: 'small' }} />
+              Rating: Low to High
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+        <ToggleButtonGroup
+          value={budgetFilter}
+          exclusive
+          onChange={(e, value) => value !== null && setBudgetFilter(value)}
+          aria-label="budget filter"
+          sx={{
+            flexWrap: 'wrap',
+            gap: 1,
+            '& .MuiToggleButton-root': {
+              color: 'white',
+              borderColor: 'rgba(255,255,255,0.3)',
+              mb: 1,
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              },
+              '&.Mui-selected': {
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.3)',
+                },
+              },
+            },
+          }}
+        >
+          <ToggleButton value="all" aria-label="all budgets">
+            <AttachMoneyIcon sx={{ mr: 1 }} />
+            All Prices
+          </ToggleButton>
+          <ToggleButton value="under5k" aria-label="under 5k">
+            Under ₹5,000
+          </ToggleButton>
+          <ToggleButton value="5k-10k" aria-label="5k to 10k">
+            ₹5,000 - ₹10,000
+          </ToggleButton>
+          <ToggleButton value="10k-25k" aria-label="10k to 25k">
+            ₹10,000 - ₹25,000
+          </ToggleButton>
+          <ToggleButton value="25k-50k" aria-label="25k to 50k">
+            ₹25,000 - ₹50,000
+          </ToggleButton>
+          <ToggleButton value="50k-100k" aria-label="50k to 100k">
+            ₹50,000 - ₹100,000
+          </ToggleButton>
+          <ToggleButton value="above100k" aria-label="above 100k">
+            Above ₹100,000
+          </ToggleButton>
+          <ToggleButton value="custom" aria-label="custom budget">
+            Custom Range
+          </ToggleButton>
+        </ToggleButtonGroup>
+        {budgetFilter === 'custom' && (
+          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" sx={{ color: 'white', minWidth: '80px' }}>
+                Min: {formatPrice(customMinBudget)}
+              </Typography>
+              <input
+                type="range"
+                min="0"
+                max={customMaxBudget}
+                step="1000"
+                value={customMinBudget}
+                onChange={(e) => {
+                  const newMin = Number(e.target.value);
+                  if (newMin <= customMaxBudget) {
+                    setCustomMinBudget(newMin);
+                  }
+                }}
+                style={{ flex: 1, maxWidth: '200px' }}
+              />
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="body2" sx={{ color: 'white', minWidth: '80px' }}>
+                Max: {formatPrice(customMaxBudget)}
+              </Typography>
+              <input
+                type="range"
+                min={customMinBudget}
+                max="200000"
+                step="1000"
+                value={customMaxBudget}
+                onChange={(e) => {
+                  const newMax = Number(e.target.value);
+                  if (newMax >= customMinBudget) {
+                    setCustomMaxBudget(newMax);
+                  }
+                }}
+                style={{ flex: 1, maxWidth: '200px' }}
+              />
+            </Box>
+            <Chip
+              label={`${formatPrice(customMinBudget)} - ${formatPrice(customMaxBudget)}`}
+              sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 'bold' }}
+            />
+          </Box>
+        )}
+      </Paper>
+
       {/* Business-Based Organization */}
       <Box sx={{ mt: 4 }}>
         {selectedCategory === 'all' ? (
           /* All Businesses Section */
-          filteredBusinesses.map((business, businessIndex) => {
-            const businessThemesList = businessThemes[business.businessId] || [];
-            const businessInventoryList = businessInventory[business.businessId] || [];
-            const businessPlatesList = businessPlates[business.businessId] || [];
+          sortBusinessesByDistance(filteredBusinesses).map((business, businessIndex) => {
+            const businessThemesList = filterAndSortThemes(
+              sortItemsByDistance(
+                businessThemes[business.businessId] || []
+              )
+            );
+            const businessInventoryList = filterAndSortInventory(
+              sortItemsByDistance(
+                businessInventory[business.businessId] || []
+              )
+            );
+            const businessPlatesList = filterAndSortPlates(
+              sortItemsByDistance(
+                businessPlates[business.businessId] || []
+              )
+            );
             
             // Skip businesses with no content
             if (businessThemesList.length === 0 && businessInventoryList.length === 0 && businessPlatesList.length === 0) return null;
+            
+            const distance = businessDistances[business.businessId];
             
             return (
               <Slide 
@@ -345,9 +943,19 @@ const ClientExplore: React.FC = () => {
                         </Button>
                       </Tooltip>
                     </Box>
-                    <Typography variant="h5" color="text.secondary" sx={{ mb: 3 }}>
-                      {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items • {businessPlatesList.length} Plates
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                      <Typography variant="h5" color="text.secondary">
+                        {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items • {businessPlatesList.length} Plates
+                      </Typography>
+                      {distance !== undefined && userLocation && (
+                        <Chip
+                          icon={<LocationOnIcon />}
+                          label={formatDistance(distance)}
+                          color="primary"
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                      )}
+                    </Box>
                   </Box>
 
                   {/* Show themes if available */}
@@ -520,9 +1128,15 @@ const ClientExplore: React.FC = () => {
             </Typography>
             
             
-            {filteredBusinesses.map((business, businessIndex) => {
-              const businessPlatesList = businessPlates[business.businessId] || [];
+            {sortBusinessesByDistance(filteredBusinesses).map((business, businessIndex) => {
+              const businessPlatesList = filterAndSortPlates(
+                sortItemsByDistance(
+                  businessPlates[business.businessId] || []
+                )
+              );
               if (businessPlatesList.length === 0) return null;
+              
+              const distance = businessDistances[business.businessId];
               
               return (
                 <Slide 
@@ -572,9 +1186,19 @@ const ClientExplore: React.FC = () => {
                           </Button>
                         </Tooltip>
                       </Box>
-                      <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-                        {business.businessCategory} • {businessPlatesList.length} Plate{businessPlatesList.length !== 1 ? 's' : ''} Available
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+                        <Typography variant="h6" color="text.secondary">
+                          {business.businessCategory} • {businessPlatesList.length} Plate{businessPlatesList.length !== 1 ? 's' : ''} Available
+                        </Typography>
+                        {distance !== undefined && userLocation && (
+                          <Chip
+                            icon={<LocationOnIcon />}
+                            label={formatDistance(distance)}
+                            color="primary"
+                            sx={{ fontWeight: 'bold' }}
+                          />
+                        )}
+                      </Box>
                     </Box>
 
                     {/* Plates List */}
@@ -637,12 +1261,22 @@ const ClientExplore: React.FC = () => {
           </Box>
         ) : (
           /* Tent & Events Section */
-          filteredBusinesses.map((business, businessIndex) => {
-            const businessThemesList = businessThemes[business.businessId] || [];
-            const businessInventoryList = businessInventory[business.businessId] || [];
+          sortBusinessesByDistance(filteredBusinesses).map((business, businessIndex) => {
+            const businessThemesList = filterAndSortThemes(
+              sortItemsByDistance(
+                businessThemes[business.businessId] || []
+              )
+            );
+            const businessInventoryList = filterAndSortInventory(
+              sortItemsByDistance(
+                businessInventory[business.businessId] || []
+              )
+            );
             
             // Skip businesses with no themes or inventory
             if (businessThemesList.length === 0 && businessInventoryList.length === 0) return null;
+            
+            const distance = businessDistances[business.businessId];
             
             return (
               <Slide 
@@ -692,9 +1326,19 @@ const ClientExplore: React.FC = () => {
                         </Button>
                       </Tooltip>
                     </Box>
-                    <Typography variant="h5" color="text.secondary" sx={{ mb: 3 }}>
-                      {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                      <Typography variant="h5" color="text.secondary">
+                        {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items
+                      </Typography>
+                      {distance !== undefined && userLocation && (
+                        <Chip
+                          icon={<LocationOnIcon />}
+                          label={formatDistance(distance)}
+                          color="primary"
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                      )}
+                    </Box>
                   </Box>
 
                   {/* Business Tabs */}

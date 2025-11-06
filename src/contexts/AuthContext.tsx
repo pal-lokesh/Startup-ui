@@ -14,14 +14,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in
-    const initializeAuth = () => {
+    // Check if user is already logged in and validate token
+    const initializeAuth = async () => {
       const storedUser = AuthService.getCurrentUser();
       const storedToken = AuthService.getToken();
       
       if (storedUser && storedToken) {
-        setUser(storedUser);
-        setToken(storedToken);
+        // Validate token before restoring session
+        const isTokenValid = AuthService.validateStoredToken();
+        
+        if (isTokenValid) {
+          // Token is valid, restore user session
+          setUser(storedUser);
+          setToken(storedToken);
+        } else {
+          // Token is expired or invalid, clear storage
+          AuthService.logout();
+          setUser(null);
+          setToken(null);
+        }
       }
       setLoading(false);
     };

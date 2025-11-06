@@ -6,9 +6,10 @@ import { CircularProgress, Box } from '@mui/material';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?: string;
+  requiredUserType?: 'VENDOR' | 'CLIENT';
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole, requiredUserType }) => {
   const { isAuthenticated, user, loading } = useAuth();
   const location = useLocation();
 
@@ -32,6 +33,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
 
   // Check role-based access if required
   if (requiredRole && user?.role !== requiredRole) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  // Check user type-based access if required
+  if (requiredUserType && user?.userType !== requiredUserType) {
     return <Navigate to="/unauthorized" replace />;
   }
 

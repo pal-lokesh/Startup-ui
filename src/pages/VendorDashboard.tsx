@@ -260,11 +260,12 @@ const VendorDashboard: React.FC = () => {
     }
 
     try {
-      await InventoryService.deleteInventory(inventoryId);
+      await InventoryService.deleteInventory(inventoryId, user?.phoneNumber);
       const updatedInventory = inventory.filter(item => item.inventoryId !== inventoryId);
       setInventory(updatedInventory);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting inventory:', err);
+      alert(err.message || 'Failed to delete inventory item');
     }
   };
 
@@ -776,7 +777,28 @@ const VendorDashboard: React.FC = () => {
                     <Grid item xs={12} sm={6} md={4} key={theme.themeId}>
                       <ThemeCard
                         theme={theme}
-                        showActions={false}
+                        onEdit={(theme) => {
+                          // Navigate to Theme Management tab or open edit form
+                          setActiveTab(1);
+                          // ThemeManagement component will handle the edit
+                        }}
+                        onDelete={async (theme) => {
+                          if (!window.confirm(`Are you sure you want to delete "${theme.themeName}"?`)) {
+                            return;
+                          }
+                          try {
+                            await ThemeService.deleteTheme(theme.themeId, user?.phoneNumber);
+                            setThemes(prev => prev.filter(t => t.themeId !== theme.themeId));
+                          } catch (err: any) {
+                            console.error('Error deleting theme:', err);
+                            alert(err.message || 'Failed to delete theme');
+                          }
+                        }}
+                        onViewImages={(theme) => {
+                          // Navigate to Theme Management tab
+                          setActiveTab(1);
+                        }}
+                        showActions={true}
                       />
                     </Grid>
                   ))}
@@ -807,6 +829,7 @@ const VendorDashboard: React.FC = () => {
                     <Grid item xs={12} sm={6} md={4} key={plate.plateId}>
                       <PlateCard
                         plate={plate}
+                        business={selectedBusiness}
                         onEdit={handleEditPlate}
                         onDelete={handlePlateDelete}
                         onUpdate={handlePlateUpdate}
@@ -913,6 +936,7 @@ const VendorDashboard: React.FC = () => {
                     <Grid item xs={12} sm={6} md={4} key={plate.plateId}>
                       <PlateCard
                         plate={plate}
+                        business={selectedBusiness}
                         onEdit={handleEditPlate}
                         onDelete={handlePlateDelete}
                         onUpdate={handlePlateUpdate}

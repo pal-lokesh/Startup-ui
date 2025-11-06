@@ -26,9 +26,22 @@ apiClient.interceptors.request.use(
 // Image Service
 export class ImageService {
   // Create a new image
-  static async createImage(imageData: ImageFormData): Promise<Image> {
-    const response = await apiClient.post('/images', imageData);
-    return response.data;
+  static async createImage(imageData: ImageFormData, vendorPhone?: string): Promise<Image> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.post('/images', imageData, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to upload images. Only vendors can upload images.');
+      }
+      throw error;
+    }
   }
 
   // Get all images
@@ -56,20 +69,59 @@ export class ImageService {
   }
 
   // Update image
-  static async updateImage(imageId: string, imageData: Partial<ImageFormData>): Promise<Image> {
-    const response = await apiClient.put(`/images/${imageId}`, imageData);
-    return response.data;
+  static async updateImage(imageId: string, imageData: Partial<ImageFormData>, vendorPhone?: string): Promise<Image> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.put(`/images/${imageId}`, imageData, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to update images. Only vendors can update images.');
+      }
+      throw error;
+    }
   }
 
   // Set image as primary
-  static async setPrimaryImage(imageId: string): Promise<Image> {
-    const response = await apiClient.post(`/images/${imageId}/set-primary`);
-    return response.data;
+  static async setPrimaryImage(imageId: string, vendorPhone?: string): Promise<Image> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.post(`/images/${imageId}/set-primary`, {}, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to set primary images. Only vendors can set primary images.');
+      }
+      throw error;
+    }
   }
 
   // Delete image
-  static async deleteImage(imageId: string): Promise<void> {
-    await apiClient.delete(`/images/${imageId}`);
+  static async deleteImage(imageId: string, vendorPhone?: string): Promise<void> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      await apiClient.delete(`/images/${imageId}`, config);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to delete images. Only vendors can delete images.');
+      }
+      throw error;
+    }
   }
 
   // Get image count

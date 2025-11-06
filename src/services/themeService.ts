@@ -26,9 +26,22 @@ apiClient.interceptors.request.use(
 // Theme Service
 export class ThemeService {
   // Create a new theme
-  static async createTheme(themeData: ThemeFormData): Promise<Theme> {
-    const response = await apiClient.post('/themes', themeData);
-    return response.data;
+  static async createTheme(themeData: ThemeFormData, vendorPhone?: string): Promise<Theme> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.post('/themes', themeData, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to create products. Only vendors can create products.');
+      }
+      throw error;
+    }
   }
 
   // Get all themes
@@ -62,14 +75,40 @@ export class ThemeService {
   }
 
   // Update theme
-  static async updateTheme(themeId: string, themeData: Partial<ThemeFormData>): Promise<Theme> {
-    const response = await apiClient.put(`/themes/${themeId}`, themeData);
-    return response.data;
+  static async updateTheme(themeId: string, themeData: Partial<ThemeFormData>, vendorPhone?: string): Promise<Theme> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      const response = await apiClient.put(`/themes/${themeId}`, themeData, config);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to update this product. You can only update your own products.');
+      }
+      throw error;
+    }
   }
 
   // Delete theme
-  static async deleteTheme(themeId: string): Promise<void> {
-    await apiClient.delete(`/themes/${themeId}`);
+  static async deleteTheme(themeId: string, vendorPhone?: string): Promise<void> {
+    const config: any = {};
+    if (vendorPhone) {
+      config.headers = {
+        'X-Vendor-Phone': vendorPhone
+      };
+    }
+    try {
+      await apiClient.delete(`/themes/${themeId}`, config);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        throw new Error('You are not authorized to delete this product. Only vendors can delete their own products.');
+      }
+      throw error;
+    }
   }
 
   // Get theme count

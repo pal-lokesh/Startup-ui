@@ -27,6 +27,13 @@ import { Inventory, InventoryImage, Business } from '../types';
 import InventoryService from '../services/inventoryService';
 import ImageCarousel from './ImageCarousel';
 import { useCart } from '../contexts/CartContext';
+import RatingDisplay from './RatingDisplay';
+import RatingComponent from './RatingComponent';
+import { Rating } from '../types/rating';
+import { useAuth } from '../contexts/AuthContext';
+import stockNotificationService from '../services/stockNotificationService';
+import { Notifications as NotificationsIcon } from '@mui/icons-material';
+import { Alert, Snackbar } from '@mui/material';
 
 interface InventoryCardProps {
   inventory: Inventory;
@@ -60,8 +67,78 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isEditingPrice, setIsEditingPrice] = useState(false);
   const [editPrice, setEditPrice] = useState<number>(inventory.price);
-  const { addToCart, isInCart } = useCart();
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [existingRating, setExistingRating] = useState<Rating | undefined>(undefined);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const { addToCart, isInCart, removeFromCart, openCart } = useCart();
+  const { user } = useAuth();
+  
+  const isOutOfStock = inventory.quantity <= 0;
+
+  const handleCartToggle = () => {
+    if (business) {
+      if (isInCart(inventory.inventoryId, 'inventory')) {
+        removeFromCart(inventory.inventoryId, 'inventory');
+      } else {
+        addToCart(inventory, business);
+      }
+    }
+  };
+
+  const handleBuyNow = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (business && !isOutOfStock) {
+      // Check if item is already in cart
+      const itemInCart = isInCart(inventory.inventoryId, 'inventory');
+      
+      // If not in cart, add it
+      if (!itemInCart) {
+        addToCart(inventory, business);
+      }
+      
+      // Open cart drawer
+      openCart();
+      
+      // Call parent's onBuyNow if provided
+      if (onBuyNow) {
+        onBuyNow(inventory, business);
+      }
+    }
+  };
+
+  // Check subscription status on mount
+  useEffect(() => {
+    if (user && isOutOfStock) {
+      stockNotificationService.isSubscribed(user.phoneNumber, inventory.inventoryId, 'INVENTORY')
+        .then(setIsSubscribed)
+        .catch(() => setIsSubscribed(false));
+    }
+  }, [user, inventory.inventoryId, isOutOfStock]);
+
+  const handleNotifyMe = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!user || !business) return;
+    
+    try {
+      setSubscribing(true);
+      await stockNotificationService.subscribe(
+        user.phoneNumber,
+        inventory.inventoryId,
+        'INVENTORY',
+        inventory.inventoryName,
+        business.businessId
+      );
+      setIsSubscribed(true);
+      setSnackbar({ open: true, message: 'You will be notified when this item is back in stock!', severity: 'success' });
+    } catch (error: any) {
+      setSnackbar({ open: true, message: error.message || 'Failed to subscribe to notifications', severity: 'error' });
+    } finally {
+      setSubscribing(false);
+    }
+  };
 
   useEffect(() => {
     fetchInventoryImages();
@@ -144,26 +221,41 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
     }
   };
 
+  const handleRateClick = () => {
+    setRatingDialogOpen(true);
+  };
+
+  const handleRatingSubmitted = (rating: Rating) => {
+    setExistingRating(rating);
+    setRatingDialogOpen(false);
+  };
+
+  const handleRatingDialogClose = () => {
+    setRatingDialogOpen(false);
+  };
+
   return (
     <Card
       sx={{
         height: '100%',
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
         transition: 'transform 0.2s',
         '&:hover': {
           transform: 'translateY(-2px)',
         },
+        minHeight: { xs: 'auto', sm: '500px' },
       }}
     >
       {/* Image Section */}
-      <Box sx={{ position: 'relative' }}>
+      <Box sx={{ position: 'relative', width: '100%', flexShrink: 0 }}>
         {loading ? (
           <Box
             display="flex"
             justifyContent="center"
             alignItems="center"
-            height="200"
+            height={{ xs: 'clamp(200px, 40vh, 250px)', sm: 'clamp(250px, 35vh, 300px)', md: 'clamp(280px, 35vh, 320px)' }}
             bgcolor="grey.100"
           >
             <CircularProgress size={40} />
@@ -173,7 +265,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             display="flex"
             justifyContent="center"
             alignItems="center"
-            height="200"
+            height={{ xs: 'clamp(200px, 40vh, 250px)', sm: 'clamp(250px, 35vh, 300px)', md: 'clamp(280px, 35vh, 320px)' }}
             bgcolor="grey.100"
             flexDirection="column"
           >
@@ -187,7 +279,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             display="flex"
             justifyContent="center"
             alignItems="center"
-            height="200"
+            height={{ xs: 'clamp(200px, 40vh, 250px)', sm: 'clamp(250px, 35vh, 300px)', md: 'clamp(280px, 35vh, 320px)' }}
             bgcolor="grey.100"
             flexDirection="column"
           >
@@ -197,111 +289,307 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             </Typography>
           </Box>
         ) : (
-          <ImageCarousel
-            images={images}
-            height={200}
-            showNavigation={true}
-            showDots={true}
-            onImageClick={() => onViewImages?.(inventory)}
-          />
+          <Box sx={{ 
+            height: { xs: 'clamp(200px, 40vh, 250px)', sm: 'clamp(250px, 35vh, 300px)', md: 'clamp(280px, 35vh, 320px)' },
+            width: '100%',
+            position: 'relative',
+            overflow: 'hidden',
+            '& > div': {
+              height: '100% !important'
+            }
+          }}>
+            <ImageCarousel
+              images={images}
+              height={400}
+              showNavigation={true}
+              showDots={true}
+              onImageClick={() => onViewImages?.(inventory)}
+            />
+          </Box>
         )}
 
-        {/* Status Chip */}
-        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 3 }}>
-          <Chip
-            label={inventory.isActive ? 'Available' : 'Unavailable'}
-            color={inventory.isActive ? 'success' : 'default'}
-            size="small"
-          />
+        {/* Status Chips */}
+        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 3, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          {isOutOfStock && (
+            <Chip 
+              label="Out of Stock" 
+              color="error"
+              size="small"
+            />
+          )}
+          {!isOutOfStock && (
+            <Chip
+              label={inventory.isActive ? 'Available' : 'Unavailable'}
+              color={inventory.isActive ? 'success' : 'default'}
+              size="small"
+            />
+          )}
         </Box>
       </Box>
 
       {/* Content Section */}
-      <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
-          <Typography variant="h6" component="h3" noWrap sx={{ flexGrow: 1, mr: 1 }}>
-            {inventory.inventoryName}
+      <CardContent sx={{ 
+        flexGrow: 1, 
+        display: 'flex', 
+        flexDirection: 'column',
+        width: '100%',
+        padding: { xs: 'clamp(12px, 2vw, 16px)', sm: 'clamp(16px, 2vw, 20px)' }
+      }}>
+        {/* Product Name - Right after image */}
+        <Typography 
+          variant="h6" 
+          component="h3" 
+          sx={{ 
+            mb: 1,
+            fontWeight: 'bold',
+            fontSize: { xs: 'clamp(1rem, 2vw, 1.125rem)', sm: 'clamp(1.125rem, 2vw, 1.25rem)' },
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            wordBreak: 'break-word'
+          }}
+        >
+          {inventory.inventoryName}
+        </Typography>
+
+        {/* Description - Right after name with consistent spacing */}
+        <Box 
+          sx={{ 
+            mb: 1.5,
+            minHeight: { xs: 'clamp(60px, 12vh, 80px)', sm: 'clamp(70px, 12vh, 90px)', md: 'clamp(80px, 12vh, 100px)' },
+            maxHeight: { xs: 'clamp(60px, 12vh, 80px)', sm: 'clamp(70px, 12vh, 90px)', md: 'clamp(80px, 12vh, 100px)' },
+            display: 'flex',
+            alignItems: 'flex-start'
+          }}
+        >
+          <Typography 
+            variant="body2" 
+            color="text.secondary" 
+            sx={{ 
+              fontSize: { xs: 'clamp(0.875rem, 1.5vw, 1rem)', sm: 'clamp(0.875rem, 1.5vw, 1rem)' },
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              wordBreak: 'break-word',
+              lineHeight: { xs: 'clamp(1.25rem, 2vw, 1.5rem)', sm: 'clamp(1.375rem, 2vw, 1.625rem)' }
+            }}
+          >
+            {inventory.inventoryDescription}
           </Typography>
+        </Box>
+
+        {/* Category Chip - Below description */}
+        <Box sx={{ mb: 1 }}>
           <Chip
             label={inventory.inventoryCategory}
             color={getCategoryColor(inventory.inventoryCategory)}
             size="small"
             variant="outlined"
+            sx={{
+              fontSize: { xs: 'clamp(0.625rem, 1vw, 0.75rem)', sm: '0.75rem' },
+              height: { xs: 'clamp(20px, 3vh, 24px)', sm: '24px' }
+            }}
           />
         </Box>
 
-        <Typography variant="body2" color="text.secondary" paragraph sx={{ flexGrow: 1 }}>
-          {inventory.inventoryDescription}
-        </Typography>
-
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Box>
+        <Box mb={2}>
+          <Box 
+            display="flex" 
+            justifyContent="flex-start" 
+            alignItems="center" 
+            mb={1} 
+            flexWrap="nowrap" 
+            gap={1}
+            sx={{ 
+              width: '100%',
+              overflow: 'hidden'
+            }}
+          >
             {isEditingPrice ? (
-              <Box display="flex" alignItems="center" gap={1}>
+              <Box display="flex" alignItems="center" gap={1} sx={{ width: '100%', flexWrap: 'wrap' }}>
                 <TextField
                   size="small"
                   type="number"
                   value={editPrice}
                   onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0)}
                   inputProps={{ min: 0, step: 0.01 }}
-                  sx={{ width: 100 }}
+                  sx={{ 
+                    width: { xs: 'clamp(80px, 20vw, 120px)', sm: 120 },
+                    flexShrink: 0,
+                    '& .MuiInputBase-input': {
+                      fontSize: { xs: 'clamp(0.875rem, 1.5vw, 1rem)', sm: '1rem' }
+                    }
+                  }}
                 />
                 <IconButton
                   size="small"
                   onClick={handlePriceSave}
                   disabled={priceUpdateLoading}
                   color="primary"
+                  sx={{ 
+                    padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 },
+                    flexShrink: 0
+                  }}
                 >
                   {priceUpdateLoading ? (
                     <CircularProgress size={16} />
                   ) : (
-                    <CheckIcon />
+                    <CheckIcon sx={{ fontSize: { xs: 'clamp(16px, 2vw, 18px)', sm: 18 } }} />
                   )}
                 </IconButton>
                 <IconButton
                   size="small"
                   onClick={handlePriceCancel}
                   disabled={priceUpdateLoading}
+                  sx={{ 
+                    padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 },
+                    flexShrink: 0
+                  }}
                 >
-                  <CloseIcon />
+                  <CloseIcon sx={{ fontSize: { xs: 'clamp(16px, 2vw, 18px)', sm: 18 } }} />
                 </IconButton>
               </Box>
             ) : (
-              <Box display="flex" alignItems="center" gap={1}>
-                <Typography variant="h6" color="primary" fontWeight="bold">
+              <Box 
+                display="flex" 
+                alignItems="center" 
+                gap={1}
+                sx={{ 
+                  width: '100%',
+                  minWidth: 0 // Allows flex items to shrink
+                }}
+              >
+                <Typography 
+                  variant="h6" 
+                  color="primary" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    fontSize: { xs: 'clamp(1rem, 2vw, 1.25rem)', sm: 'clamp(1.125rem, 2vw, 1.5rem)' },
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    flexShrink: 0,
+                    maxWidth: '100%'
+                  }}
+                >
                   {formatPrice(inventory.price)}
                 </Typography>
-                {showActions && onPriceUpdate && (
+                {/* Only show edit price button for vendors */}
+                {showActions && onPriceUpdate && user && user.userType === 'VENDOR' && (
                   <Tooltip title="Edit Price">
                     <IconButton
                       size="small"
                       onClick={handlePriceEdit}
-                      sx={{ ml: 0.5 }}
+                      sx={{ 
+                        ml: 0.5,
+                        padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 },
+                        flexShrink: 0
+                      }}
                     >
-                      <PriceIcon fontSize="small" />
+                      <PriceIcon sx={{ fontSize: { xs: 'clamp(16px, 2vw, 18px)', sm: 18 } }} />
                     </IconButton>
                   </Tooltip>
                 )}
               </Box>
             )}
-            <Typography variant="caption" color="text.secondary">
-              Qty: {inventory.quantity}
-            </Typography>
           </Box>
+          <Typography 
+            variant="caption" 
+            color="text.secondary"
+            sx={{ 
+              fontSize: { xs: 'clamp(0.625rem, 1vw, 0.75rem)', sm: '0.75rem' },
+              display: 'block',
+              mb: 1
+            }}
+          >
+            Qty: {inventory.quantity}
+          </Typography>
+          
+          {/* Rating Display */}
+          {business && (
+            <Box 
+              mt={1} 
+              mb={1}
+              sx={{
+                '& .MuiRating-root': {
+                  fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' }
+                },
+                '& .MuiTypography-root': {
+                  fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' }
+                },
+                '& .MuiButton-root': {
+                  fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
+                  padding: { xs: 'clamp(2px, 0.5vw, 4px) clamp(6px, 1vw, 8px)', sm: '4px 8px' },
+                  minHeight: { xs: 'clamp(20px, 3vh, 24px)', sm: '24px' }
+                },
+                '& .MuiSvgIcon-root': {
+                  fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' }
+                }
+              }}
+            >
+              <RatingDisplay
+                itemId={inventory.inventoryId}
+                itemType="INVENTORY"
+                businessId={business.businessId}
+                onRateClick={handleRateClick}
+                showRateButton={true}
+                compact={true}
+              />
+            </Box>
+          )}
         </Box>
 
-        {/* Cart and Buy Now Buttons */}
-        {business && (showCartButton || showBuyNowButton) && (
-          <Box sx={{ mb: 2 }}>
-            <Box display="flex" gap={1} mb={1}>
+        {/* Out of Stock - Notify Me Button */}
+        {isOutOfStock && user && user.userType === 'CLIENT' && (
+          <Button
+            variant={isSubscribed ? "contained" : "outlined"}
+            color={isSubscribed ? "success" : "primary"}
+            size="small"
+            startIcon={<NotificationsIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
+            onClick={handleNotifyMe}
+            disabled={subscribing || isSubscribed}
+            fullWidth
+            sx={{
+              fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
+              padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
+              minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
+              mb: 2,
+              mt: 'auto'
+            }}
+          >
+            {subscribing ? 'Subscribing...' : isSubscribed ? 'Notification Set' : 'Notify Me When Available'}
+          </Button>
+        )}
+        
+        {/* Cart and Buy Now Buttons - Only show when in stock */}
+        {business && !isOutOfStock && (showCartButton || showBuyNowButton) && (
+          <Box sx={{ mb: 2, mt: 'auto' }}>
+            <Box 
+              display="flex" 
+              gap={{ xs: 0.5, sm: 1 }} 
+              flexDirection={{ xs: 'column', sm: 'row' }}
+              sx={{ width: '100%' }}
+            >
               {showCartButton && (
                 <Button
                   variant={isInCart(inventory.inventoryId, 'inventory') ? "contained" : "outlined"}
                   color={isInCart(inventory.inventoryId, 'inventory') ? "success" : "primary"}
                   size="small"
-                  startIcon={<CartIcon />}
-                  onClick={() => addToCart(inventory, business)}
+                  startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
+                  onClick={handleCartToggle}
                   fullWidth
+                  sx={{
+                    fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
+                    padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
+                    minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                    overflow: 'hidden'
+                  }}
                 >
                   {isInCart(inventory.inventoryId, 'inventory') ? "In Cart" : "Add to Cart"}
                 </Button>
@@ -311,9 +599,17 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
                   variant="contained"
                   color="secondary"
                   size="small"
-                  startIcon={<BuyNowIcon />}
-                  onClick={() => onBuyNow && onBuyNow(inventory, business)}
+                  startIcon={<BuyNowIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
+                  onClick={handleBuyNow}
                   fullWidth
+                  sx={{
+                    fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
+                    padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
+                    minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                    overflow: 'hidden'
+                  }}
                 >
                   Buy Now
                 </Button>
@@ -322,8 +618,8 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           </Box>
         )}
 
-        {/* Admin Action Buttons */}
-        {showActions && (
+        {/* Admin Action Buttons - Only show for vendors */}
+        {showActions && user && user.userType === 'VENDOR' && (
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Box>
               {onViewImages && (
@@ -367,6 +663,32 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           </Box>
         )}
       </CardContent>
+
+      {/* Rating Dialog */}
+      {business && (
+        <RatingComponent
+          open={ratingDialogOpen}
+          onClose={handleRatingDialogClose}
+          itemId={inventory.inventoryId}
+          itemType="INVENTORY"
+          itemName={inventory.inventoryName}
+          businessId={business.businessId}
+          existingRating={existingRating}
+          onRatingSubmitted={handleRatingSubmitted}
+        />
+      )}
+      
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Card>
   );
 };

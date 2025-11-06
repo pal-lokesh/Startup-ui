@@ -25,6 +25,7 @@ import {
 import { Image, InventoryImage } from '../types';
 import ImageService from '../services/imageService';
 import InventoryService from '../services/inventoryService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ImageUploadProps {
   open?: boolean;
@@ -45,6 +46,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   onUploadSuccess,
   uploadType = 'theme',
 }) => {
+  const { user } = useAuth();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +137,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
           };
 
           console.log('Preparing to save inventory image:', imageData);
-          return await InventoryService.createInventoryImage(imageData);
+          return await InventoryService.createInventoryImage(imageData, user?.phoneNumber);
         } else {
           const imageData = {
             themeId,
@@ -146,7 +148,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
             imageType: file.type,
           };
 
-          return await ImageService.createImage(imageData);
+          return await ImageService.createImage(imageData, user?.phoneNumber);
         }
       });
 
@@ -251,28 +253,55 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
                 Selected Images ({selectedFiles.length})
               </Typography>
               
-              <Grid container spacing={2}>
+              <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} sx={{ padding: { xs: 1, sm: 2 } }}>
                 {selectedFiles.map((file, index) => (
-                  <Grid item xs={12} sm={6} md={4} key={index}>
-                    <Card>
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
+                    <Card sx={{ 
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      borderRadius: 'clamp(8px, 1vw, 12px)',
+                      overflow: 'hidden',
+                      boxShadow: 2,
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: 4,
+                      }
+                    }}>
                       <CardMedia
                         component="img"
-                        height="200"
+                        height="240"
                         image={previewUrls[index]}
                         alt={file.name}
+                        sx={{ 
+                          objectFit: 'cover',
+                          width: '100%',
+                          height: '240px',
+                          flexGrow: 1
+                        }}
                       />
-                      <CardContent>
-                        <Typography variant="body2" noWrap>
+                      <CardContent sx={{ 
+                        padding: { xs: 'clamp(8px, 1.5vw, 12px)', sm: 'clamp(12px, 2vw, 16px)' },
+                        flexGrow: 0
+                      }}>
+                        <Typography variant="body2" noWrap sx={{ mb: 0.5, fontWeight: 500 }}>
                           {file.name}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
                           {(file.size / 1024 / 1024).toFixed(2)} MB
                         </Typography>
-                        <Box sx={{ mt: 1 }}>
+                        <Box sx={{ 
+                          mt: 1,
+                          pt: 1,
+                          borderTop: '1px solid',
+                          borderColor: 'divider'
+                        }}>
                           <IconButton
                             size="small"
                             onClick={() => handleRemoveFile(index)}
                             color="error"
+                            sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
                           >
                             <DeleteIcon />
                           </IconButton>
@@ -348,28 +377,55 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               Selected Images ({selectedFiles.length})
             </Typography>
             
-            <Grid container spacing={2}>
+            <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} sx={{ padding: { xs: 1, sm: 2 } }}>
               {selectedFiles.map((file, index) => (
-                <Grid item xs={12} sm={6} md={4} key={index}>
-                  <Card>
+                <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
+                  <Card sx={{ 
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderRadius: 'clamp(8px, 1vw, 12px)',
+                    overflow: 'hidden',
+                    boxShadow: 2,
+                    transition: 'transform 0.2s, box-shadow 0.2s',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 4,
+                    }
+                  }}>
                     <CardMedia
                       component="img"
-                      height="200"
+                      height="240"
                       image={previewUrls[index]}
                       alt={file.name}
+                      sx={{ 
+                        objectFit: 'cover',
+                        width: '100%',
+                        height: '240px',
+                        flexGrow: 1
+                      }}
                     />
-                    <CardContent>
-                      <Typography variant="body2" noWrap>
+                    <CardContent sx={{ 
+                      padding: { xs: 'clamp(8px, 1.5vw, 12px)', sm: 'clamp(12px, 2vw, 16px)' },
+                      flexGrow: 0
+                    }}>
+                      <Typography variant="body2" noWrap sx={{ mb: 0.5, fontWeight: 500 }}>
                         {file.name}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
                         {(file.size / 1024 / 1024).toFixed(2)} MB
                       </Typography>
-                      <Box sx={{ mt: 1 }}>
+                      <Box sx={{ 
+                        mt: 1,
+                        pt: 1,
+                        borderTop: '1px solid',
+                        borderColor: 'divider'
+                      }}>
                         <IconButton
                           size="small"
                           onClick={() => handleRemoveFile(index)}
                           color="error"
+                          sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
                         >
                           <DeleteIcon />
                         </IconButton>

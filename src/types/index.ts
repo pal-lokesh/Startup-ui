@@ -5,6 +5,7 @@ export interface User {
   email: string;
   phoneNumber: string;
   userType: UserType;
+  role?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +39,8 @@ export interface Business {
   businessDescription: string;
   businessCategory: string;
   businessAddress: string;
+  latitude?: number;
+  longitude?: number;
   businessPhone: string;
   businessEmail: string;
   website?: string;
@@ -56,6 +59,7 @@ export interface Theme {
   themeDescription: string;
   themeCategory: string;
   priceRange: string;
+  quantity?: number; // Stock quantity
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -240,6 +244,7 @@ export interface Plate {
   plateImage: string;
   price: number;
   dishType: 'veg' | 'non-veg';
+  quantity?: number; // Stock quantity
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -252,4 +257,40 @@ export interface PlateFormData {
   plateImage: string;
   price: number;
   dishType: 'veg' | 'non-veg';
+}
+
+// Order Types
+export interface Order {
+  orderId: string;
+  userId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  deliveryDate: string;
+  specialNotes?: string;
+  totalAmount: number;
+  status: OrderStatus;
+  orderDate: string;
+  orderItems: OrderItem[];
+}
+
+export interface OrderItem {
+  itemId: string;
+  itemName: string;
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  quantity: number;
+  price: number;
+  businessId: string;
+  businessName: string;
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  PREPARING = 'PREPARING',
+  READY = 'READY',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
+  SHIPPED = 'SHIPPED'
 }
