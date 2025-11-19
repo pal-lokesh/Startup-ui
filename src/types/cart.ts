@@ -1,6 +1,6 @@
 export interface CartItem {
   id: string;
-  type: 'theme' | 'inventory' | 'plate';
+  type: 'theme' | 'inventory' | 'plate' | 'dish';
   name: string;
   description: string;
   price: number;
@@ -10,6 +10,7 @@ export interface CartItem {
   businessName: string;
   quantity: number;
   category: string;
+  bookingDate?: string; // Date for which the item is booked (YYYY-MM-DD format)
   // Additional properties based on item type
   themeId?: string;
   inventoryId?: string;
@@ -20,7 +21,18 @@ export interface CartItem {
   inventoryCategory?: string;
   // For plates
   dishType?: 'veg' | 'non-veg';
+  // For dishes
+  dishId?: string;
+  dishAvailabilityDates?: string[];
+  // For plates with dishes
+  selectedDishes?: Array<{
+    dishId: string;
+    dishName: string;
+    dishPrice: number;
+    quantity: number;
+  }>;
 }
+
 
 export interface Cart {
   items: CartItem[];
@@ -54,6 +66,8 @@ export interface OrderItemResponse {
   businessId: string;
   businessName: string;
   imageUrl?: string;
+  bookingDate?: string; // Date for which the item is booked (YYYY-MM-DD format)
+  selectedDishes?: string; // JSON string storing selected dishes for plates
 }
 
 export interface OrderFormData {

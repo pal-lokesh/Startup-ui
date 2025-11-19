@@ -2,7 +2,7 @@ export interface Rating {
   ratingId: string;
   clientPhone: string;
   itemId: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   businessId: string;
   rating: number; // 1-5 stars
   comment: string;
@@ -14,7 +14,7 @@ export interface Rating {
 
 export interface RatingRequest {
   itemId: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   businessId: string;
   rating: number; // 1-5 stars
   comment: string;
@@ -23,7 +23,7 @@ export interface RatingRequest {
 
 export interface RatingStats {
   itemId: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   businessId: string;
   averageRating: number;
   totalRatings: number;
@@ -43,7 +43,7 @@ export interface RatingDialogProps {
   open: boolean;
   onClose: () => void;
   itemId: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   itemName: string;
   businessId: string;
   orderId?: string;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   IconButton,
-  TextField,
   Chip,
   Dialog,
   DialogTitle,
@@ -17,14 +16,12 @@ import {
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Save as SaveIcon,
-  Cancel as CancelIcon,
   ShoppingCart as CartIcon,
-  Add as AddIcon,
   FlashOn as BuyNowIcon,
+  CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
-import { Plate, Business } from '../types';
-import PlateService from '../services/plateService';
+import { Dish, Business } from '../types';
+import dishService from '../services/dishService';
 import ImageCarousel from './ImageCarousel';
 import { useCart } from '../contexts/CartContext';
 import RatingDisplay from './RatingDisplay';
@@ -33,21 +30,21 @@ import { Rating } from '../types/rating';
 import { useAuth } from '../contexts/AuthContext';
 import { Snackbar } from '@mui/material';
 import DatePickerDialog from './DatePickerDialog';
-import PlateDishSelector from './PlateDishSelector';
+import StarIcon from '@mui/icons-material/Star';
 
-interface PlateCardProps {
-  plate: Plate;
+interface DishCardProps {
+  dish: Dish;
   business?: Business;
-  onEdit: (plate: Plate) => void;
-  onDelete: (plateId: string) => void;
-  onUpdate: (plate: Plate) => void;
-  onBuyNow?: (plate: Plate, business: Business) => void;
+  onEdit: (dish: Dish) => void;
+  onDelete: (dishId: string) => void;
+  onUpdate: (dish: Dish) => void;
+  onBuyNow?: (dish: Dish, business: Business) => void;
   showCartButton?: boolean;
   showBuyNowButton?: boolean;
 }
 
-const PlateCard: React.FC<PlateCardProps> = ({
-  plate,
+const DishCard: React.FC<DishCardProps> = ({
+  dish,
   business,
   onEdit,
   onDelete,
@@ -56,57 +53,22 @@ const PlateCard: React.FC<PlateCardProps> = ({
   showCartButton = true,
   showBuyNowButton = true,
 }) => {
-  const [isEditingPrice, setIsEditingPrice] = useState(false);
-  const [editPrice, setEditPrice] = useState(plate.price.toString());
-  const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
   const [existingRating, setExistingRating] = useState<Rating | undefined>(undefined);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [dishSelectorOpen, setDishSelectorOpen] = useState(false);
   const [pendingCartAction, setPendingCartAction] = useState<'add' | 'buyNow' | null>(null);
-  const [pendingBookingDate, setPendingBookingDate] = useState<string | undefined>(undefined);
   const { addToCart, isInCart, removeFromCart, openCart } = useCart();
   const { user } = useAuth();
   
-  const isOutOfStock = (plate.quantity ?? 0) <= 0;
-
-  // Normalize plate image URL - handle Base64, file paths, and LOB OIDs
-  const getPlateImageUrl = (imagePath: string | undefined): string => {
-    if (!imagePath) return '';
-    
-    // If it's already a full URL (http:// or https://) or Base64 (data:), return as is
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
-      return imagePath;
-    }
-    
-    // If it's just a number (LOB OID), it's invalid - return empty or fallback
-    if (/^\d+$/.test(imagePath.trim())) {
-      console.warn('Plate image is stored as LOB OID, not a valid image:', imagePath);
-      return ''; // Return empty to show no image
-    }
-    
-    // If it's a relative path starting with /uploads, prepend the backend URL
-    if (imagePath.startsWith('/uploads/')) {
-      return `http://localhost:8080${imagePath}`;
-    }
-    
-    // If it's just a filename or path without leading slash, construct the full path
-    if (imagePath.includes('uploads/') || imagePath.includes('plates/')) {
-      const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
-      return `http://localhost:8080${normalizedPath}`;
-    }
-    
-    // Default: assume it's a relative path in uploads/plates
-    return `http://localhost:8080/uploads/plates/${imagePath}`;
-  };
+  const isUnavailable = !dish.isAvailable;
 
   const handleCartToggle = () => {
     if (business) {
-      if (isInCart(plate.plateId, 'plate')) {
-        removeFromCart(plate.plateId, 'plate');
+      if (isInCart(dish.dishId, 'dish')) {
+        removeFromCart(dish.dishId, 'dish');
       } else {
         // Open date picker first
         setPendingCartAction('add');
@@ -126,32 +88,8 @@ const PlateCard: React.FC<PlateCardProps> = ({
 
   const handleDateConfirm = (date: string | undefined) => {
     if (business && pendingCartAction) {
-      // Store the booking date
-      setPendingBookingDate(date);
-      setDatePickerOpen(false);
-      
-      // Only open dish selector for catering businesses
-      if (business.businessCategory === 'caters') {
-        setDishSelectorOpen(true);
-      } else {
-        // For non-catering businesses, add directly to cart without dishes
-        addToCart(plate, business, date);
-        if (pendingCartAction === 'buyNow') {
-          openCart();
-          if (onBuyNow) {
-            onBuyNow(plate, business);
-          }
-        }
-        setPendingCartAction(null);
-        setPendingBookingDate(undefined);
-      }
-    }
-  };
-
-  const handleDishSelectorConfirm = (selectedDishes: Array<{ dishId: string; dishName: string; dishPrice: number; quantity: number }>) => {
-    if (business && pendingCartAction) {
-      // Add to cart with selected date and dishes
-      addToCart(plate, business, pendingBookingDate, selectedDishes);
+      // Add to cart with selected date
+      addToCart(dish, business, date);
       
       if (pendingCartAction === 'buyNow') {
         // Open cart drawer
@@ -159,70 +97,22 @@ const PlateCard: React.FC<PlateCardProps> = ({
         
         // Call parent's onBuyNow if provided
         if (onBuyNow) {
-          onBuyNow(plate, business);
+          onBuyNow(dish, business);
         }
       }
     }
-    setDishSelectorOpen(false);
+    setDatePickerOpen(false);
     setPendingCartAction(null);
-    setPendingBookingDate(undefined);
-  };
-
-  const handleDishSelectorCancel = () => {
-    setDishSelectorOpen(false);
-    setPendingCartAction(null);
-    setPendingBookingDate(undefined);
-  };
-
-
-  const handlePriceEdit = () => {
-    setIsEditingPrice(true);
-    setEditPrice(plate.price.toString());
-  };
-
-  const handlePriceCancel = () => {
-    setIsEditingPrice(false);
-    setEditPrice(plate.price.toString());
-  };
-
-  const handlePriceSave = async () => {
-    const newPrice = parseFloat(editPrice);
-    if (isNaN(newPrice) || newPrice <= 0) {
-      setError('Please enter a valid price');
-      return;
-    }
-
-    try {
-      setPriceUpdateLoading(true);
-      setError(null);
-      
-      const updatedPlate = await PlateService.updatePlate(plate.plateId, {
-        businessId: plate.businessId,
-        dishName: plate.dishName,
-        dishDescription: plate.dishDescription,
-        plateImage: plate.plateImage,
-        price: newPrice,
-        dishType: plate.dishType || 'veg',
-      });
-      
-      onUpdate(updatedPlate);
-      setIsEditingPrice(false);
-    } catch (err: any) {
-      setError('Failed to update price');
-      console.error('Error updating plate price:', err);
-    } finally {
-      setPriceUpdateLoading(false);
-    }
   };
 
   const handleDeleteConfirm = async () => {
     try {
-      await PlateService.deletePlate(plate.plateId, user?.phoneNumber);
-      onDelete(plate.plateId);
+      await dishService.deleteDish(dish.dishId, user?.phoneNumber);
+      onDelete(dish.dishId);
       setDeleteDialogOpen(false);
     } catch (err: any) {
-      setError(err.message || 'Failed to delete plate');
-      console.error('Error deleting plate:', err);
+      setError(err.message || 'Failed to delete dish');
+      console.error('Error deleting dish:', err);
     }
   };
 
@@ -239,6 +129,37 @@ const PlateCard: React.FC<PlateCardProps> = ({
     setRatingDialogOpen(false);
   };
 
+  // Normalize image URL - handle Base64, file paths, and LOB OIDs
+  const getImageUrl = (imagePath: string | undefined): string => {
+    if (!imagePath) return '';
+    
+    // If it's already a full URL (http:// or https://) or Base64 (data:), return as is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
+      return imagePath;
+    }
+    
+    // If it's just a number (LOB OID), it's invalid - return empty or fallback
+    if (/^\d+$/.test(imagePath.trim())) {
+      console.warn('Dish image is stored as LOB OID, not a valid image:', imagePath);
+      return ''; // Return empty to show no image
+    }
+    
+    // If it's a relative path starting with /uploads, prepend the backend URL
+    if (imagePath.startsWith('/uploads/')) {
+      return `http://localhost:8080${imagePath}`;
+    }
+    
+    // If it's just a filename or path without leading slash, construct the full path
+    if (imagePath.includes('uploads/') || imagePath.includes('dishes/')) {
+      // Handle paths like "uploads/dishes/gulabjamun.jpg" or "dishes/gulabjamun.jpg"
+      const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+      return `http://localhost:8080${normalizedPath}`;
+    }
+    
+    // Default: assume it's a relative path in uploads/dishes
+    return `http://localhost:8080/uploads/dishes/${imagePath}`;
+  };
+
   return (
     <>
       <Card sx={{ 
@@ -248,7 +169,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
         flexDirection: 'column',
         width: '100%'
       }}>
-        {plate.plateImage && (
+        {dish.dishImage && (
           <Box sx={{ 
             height: { xs: 'clamp(200px, 40vh, 280px)', sm: 'clamp(250px, 35vh, 320px)', md: 'clamp(280px, 35vh, 350px)' },
             width: '100%',
@@ -266,9 +187,9 @@ const PlateCard: React.FC<PlateCardProps> = ({
           }}>
             <ImageCarousel
               images={[{
-                imageId: plate.plateId,
-                imageUrl: getPlateImageUrl(plate.plateImage),
-                imageName: plate.dishName
+                imageId: dish.dishId,
+                imageUrl: getImageUrl(dish.dishImage),
+                imageName: dish.dishName
               }]}
               height={400}
               showNavigation={false}
@@ -277,7 +198,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
           </Box>
         )}
         <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-          {/* Chips Section - Veg/Non-Veg and Active/Inactive */}
+          {/* Availability Chip */}
           <Box 
             sx={{ 
               display: 'flex', 
@@ -289,18 +210,8 @@ const PlateCard: React.FC<PlateCardProps> = ({
             }}
           >
             <Chip 
-              label={(plate.dishType || 'veg') === 'veg' ? 'Veg' : 'Non-Veg'} 
-              color={(plate.dishType || 'veg') === 'veg' ? 'success' : 'error'}
-              size="small"
-              variant="outlined"
-              sx={{
-                fontSize: { xs: 'clamp(0.625rem, 1vw, 0.75rem)', sm: '0.75rem' },
-                height: { xs: 'clamp(20px, 3vh, 24px)', sm: '24px' }
-              }}
-            />
-            <Chip 
-              label={plate.isActive ? 'Active' : 'Inactive'} 
-              color={plate.isActive ? 'success' : 'default'}
+              label={dish.isAvailable ? 'Available' : 'Unavailable'} 
+              color={dish.isAvailable ? 'success' : 'default'}
               size="small"
               sx={{
                 fontSize: { xs: 'clamp(0.625rem, 1vw, 0.75rem)', sm: '0.75rem' },
@@ -309,7 +220,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
             />
           </Box>
           
-          {/* Dish Name - Below the chips */}
+          {/* Dish Name */}
           <Typography 
             variant="h6" 
             component="h2" 
@@ -326,63 +237,25 @@ const PlateCard: React.FC<PlateCardProps> = ({
               lineHeight: { xs: 'clamp(1.25rem, 2.5vw, 1.5rem)', sm: 'clamp(1.375rem, 2.5vw, 1.625rem)' }
             }}
           >
-            {plate.dishName}
+            {dish.dishName}
           </Typography>
           
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2, flexGrow: 1 }}>
-            {plate.dishDescription}
+            {dish.dishDescription}
           </Typography>
           
           {/* Price Section */}
           <Box sx={{ mb: 2 }}>
-            {isEditingPrice ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <TextField
-                  size="small"
-                  type="number"
-                  value={editPrice}
-                  onChange={(e) => setEditPrice(e.target.value)}
-                  inputProps={{ min: 0, step: 0.01 }}
-                  sx={{ 
-                    width: { xs: 'clamp(80px, 20vw, 120px)', sm: 120 },
-                    flexGrow: 1,
-                    '& .MuiInputBase-input': {
-                      fontSize: { xs: 'clamp(0.875rem, 1.5vw, 1rem)', sm: '1rem' }
-                    }
-                  }}
-                />
-                <IconButton
-                  size="small"
-                  color="primary"
-                  onClick={handlePriceSave}
-                  disabled={priceUpdateLoading}
-                  sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
-                >
-                  <SaveIcon sx={{ fontSize: { xs: 'clamp(16px, 2vw, 18px)', sm: 18 } }} />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={handlePriceCancel}
-                  disabled={priceUpdateLoading}
-                  sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
-                >
-                  <CancelIcon sx={{ fontSize: { xs: 'clamp(16px, 2vw, 18px)', sm: 18 } }} />
-                </IconButton>
-              </Box>
-            ) : (
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexWrap: 'wrap', gap: 1 }}>
-                <Typography 
-                  variant="h6" 
-                  color="primary" 
-                  sx={{ 
-                    fontWeight: 'bold',
-                    fontSize: { xs: 'clamp(1rem, 2vw, 1.25rem)', sm: 'clamp(1.125rem, 2vw, 1.5rem)' }
-                  }}
-                >
-                  ₹{plate.price.toFixed(2)}
-                </Typography>
-              </Box>
-            )}
+            <Typography 
+              variant="h6" 
+              color="primary" 
+              sx={{ 
+                fontWeight: 'bold',
+                fontSize: { xs: 'clamp(1rem, 2vw, 1.25rem)', sm: 'clamp(1.125rem, 2vw, 1.5rem)' }
+              }}
+            >
+              ₹{dish.price.toFixed(2)}
+            </Typography>
           </Box>
             
           {/* Rating Display */}
@@ -408,8 +281,8 @@ const PlateCard: React.FC<PlateCardProps> = ({
               }}
             >
               <RatingDisplay
-                itemId={plate.plateId}
-                itemType="PLATE"
+                itemId={dish.dishId}
+                itemType="DISH"
                 businessId={business.businessId}
                 onRateClick={handleRateClick}
                 showRateButton={true}
@@ -418,7 +291,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
             </Box>
           )}
           
-          {/* Cart and Buy Now Buttons - Always show, date picker will handle availability */}
+          {/* Cart and Buy Now Buttons */}
           {business && (showCartButton || showBuyNowButton) && (
             <Box sx={{ mb: 2 }}>
               <Box 
@@ -429,12 +302,13 @@ const PlateCard: React.FC<PlateCardProps> = ({
               >
                 {showCartButton && (
                   <Button
-                    variant={isInCart(plate.plateId, 'plate') ? "contained" : "outlined"}
-                    color={isInCart(plate.plateId, 'plate') ? "success" : "primary"}
+                    variant={isInCart(dish.dishId, 'dish') ? "contained" : "outlined"}
+                    color={isInCart(dish.dishId, 'dish') ? "success" : "primary"}
                     size="small"
                     startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
                     onClick={handleCartToggle}
                     fullWidth
+                    disabled={isUnavailable}
                     sx={{
                       fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
                       padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
@@ -444,7 +318,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
                       overflow: 'hidden'
                     }}
                   >
-                    {isInCart(plate.plateId, 'plate') ? "In Cart" : "Add to Cart"}
+                    {isInCart(dish.dishId, 'dish') ? "In Cart" : "Add to Cart"}
                   </Button>
                 )}
                 {showBuyNowButton && (
@@ -455,6 +329,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
                     startIcon={<BuyNowIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
                     onClick={handleBuyNow}
                     fullWidth
+                    disabled={isUnavailable}
                     sx={{
                       fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
                       padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
@@ -479,9 +354,9 @@ const PlateCard: React.FC<PlateCardProps> = ({
                 color="primary"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit(plate);
+                  onEdit(dish);
                 }}
-                title="Edit Plate"
+                title="Edit Dish"
                 sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
               >
                 <EditIcon sx={{ fontSize: { xs: 'clamp(16px, 2vw, 18px)', sm: 18 } }} />
@@ -493,7 +368,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
                   e.stopPropagation();
                   setDeleteDialogOpen(true);
                 }}
-                title="Delete Plate"
+                title="Delete Dish"
                 sx={{ padding: { xs: 'clamp(4px, 1vw, 8px)', sm: 1 } }}
               >
                 <DeleteIcon sx={{ fontSize: { xs: 'clamp(16px, 2vw, 18px)', sm: 18 } }} />
@@ -505,10 +380,10 @@ const PlateCard: React.FC<PlateCardProps> = ({
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Plate</DialogTitle>
+        <DialogTitle>Delete Dish</DialogTitle>
         <DialogContent>
           <Typography>
-            Are you sure you want to delete "{plate.dishName}"? This action cannot be undone.
+            Are you sure you want to delete "{dish.dishName}"? This action cannot be undone.
           </Typography>
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
@@ -529,9 +404,9 @@ const PlateCard: React.FC<PlateCardProps> = ({
         <RatingComponent
           open={ratingDialogOpen}
           onClose={handleRatingDialogClose}
-          itemId={plate.plateId}
-          itemType="PLATE"
-          itemName={plate.dishName}
+          itemId={dish.dishId}
+          itemType="DISH"
+          itemName={dish.dishName}
           businessId={business.businessId}
           existingRating={existingRating}
           onRatingSubmitted={handleRatingSubmitted}
@@ -552,38 +427,30 @@ const PlateCard: React.FC<PlateCardProps> = ({
 
       {/* Date Picker Dialog */}
       {business && (
-        <>
-          <DatePickerDialog
-            open={datePickerOpen}
-            onClose={() => {
-              setDatePickerOpen(false);
-              setPendingCartAction(null);
-            }}
-            onConfirm={handleDateConfirm}
-            itemId={plate.plateId}
-            itemType="plate"
-            itemName={plate.dishName}
+        <DatePickerDialog
+          open={datePickerOpen}
+          onClose={() => {
+            setDatePickerOpen(false);
+            setPendingCartAction(null);
+          }}
+          onConfirm={handleDateConfirm}
+          itemId={dish.dishId}
+          itemType="dish"
+          itemName={dish.dishName}
           businessId={business.businessId}
-          title="Select Booking Date for Plate"
+          title="Select Booking Date for Dish"
           onNotify={(date) => {
             setSnackbar({ 
               open: true, 
-              message: `You will be notified when "${plate.dishName}" becomes available on ${date}`, 
+              message: `You will be notified when "${dish.dishName}" becomes available on ${date}`, 
               severity: 'success' 
             });
           }}
         />
-        <PlateDishSelector
-          open={dishSelectorOpen}
-          onClose={handleDishSelectorCancel}
-          onConfirm={handleDishSelectorConfirm}
-          plate={plate}
-          business={business}
-        />
-        </>
       )}
     </>
   );
 };
 
-export default PlateCard;
+export default DishCard;
+

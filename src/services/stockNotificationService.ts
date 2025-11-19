@@ -26,9 +26,10 @@ export interface StockNotification {
   notificationId: number;
   userId: string;
   itemId: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   itemName: string;
   businessId: string;
+  requestedDate?: string; // Optional: specific date the user wants to be notified about
   notified: boolean;
   createdAt: string;
   notifiedAt?: string;
@@ -41,9 +42,10 @@ class StockNotificationService {
   async subscribe(
     userId: string,
     itemId: string,
-    itemType: 'THEME' | 'INVENTORY' | 'PLATE',
+    itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH',
     itemName: string,
-    businessId: string
+    businessId: string,
+    requestedDate?: string // Optional: specific date for date-wise availability
   ): Promise<StockNotification> {
     try {
       const response = await apiClient.post('/stock-notifications/subscribe', {
@@ -52,6 +54,7 @@ class StockNotificationService {
         itemType,
         itemName,
         businessId,
+        requestedDate, // Include date if provided
       });
       return response.data;
     } catch (error: any) {
@@ -66,7 +69,7 @@ class StockNotificationService {
   async unsubscribe(
     userId: string,
     itemId: string,
-    itemType: 'THEME' | 'INVENTORY' | 'PLATE'
+    itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH'
   ): Promise<void> {
     try {
       await apiClient.delete('/stock-notifications/unsubscribe', {
@@ -84,12 +87,15 @@ class StockNotificationService {
   async isSubscribed(
     userId: string,
     itemId: string,
-    itemType: 'THEME' | 'INVENTORY' | 'PLATE'
+    itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH',
+    requestedDate?: string // Optional: specific date to check subscription for
   ): Promise<boolean> {
     try {
-      const response = await apiClient.get('/stock-notifications/check', {
-        params: { userId, itemId, itemType },
-      });
+      const params: any = { userId, itemId, itemType };
+      if (requestedDate) {
+        params.requestedDate = requestedDate;
+      }
+      const response = await apiClient.get('/stock-notifications/check', { params });
       return response.data.subscribed || false;
     } catch (error: any) {
       console.error('Error checking subscription:', error);

@@ -61,7 +61,7 @@ class RatingService {
   }
 
   // Get all ratings for a specific item
-  async getRatingsByItem(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE'): Promise<Rating[]> {
+  async getRatingsByItem(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH'): Promise<Rating[]> {
     const response = await fetch(`${API_BASE_URL}/ratings/item/${itemId}/${itemType}`, {
       method: 'GET',
       headers: this.getHeaders(),
@@ -121,7 +121,7 @@ class RatingService {
   }
 
   // Get rating statistics for an item
-  async getRatingStats(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE'): Promise<RatingStats> {
+  async getRatingStats(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH'): Promise<RatingStats> {
     const response = await fetch(`${API_BASE_URL}/ratings/stats/item/${itemId}/${itemType}`, {
       method: 'GET',
       headers: this.getHeaders(),
@@ -151,7 +151,7 @@ class RatingService {
   }
 
   // Check if client has rated an item
-  async hasClientRatedItem(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE'): Promise<boolean> {
+  async hasClientRatedItem(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH'): Promise<boolean> {
     const response = await fetch(`${API_BASE_URL}/ratings/check/${itemId}/${itemType}`, {
       method: 'GET',
       headers: this.getHeaders(),
@@ -167,7 +167,7 @@ class RatingService {
   }
 
   // Get client's rating for an item
-  async getClientRatingForItem(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE'): Promise<Rating | null> {
+  async getClientRatingForItem(itemId: string, itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH'): Promise<Rating | null> {
     const response = await fetch(`${API_BASE_URL}/ratings/client/${itemId}/${itemType}`, {
       method: 'GET',
       headers: this.getHeaders(),

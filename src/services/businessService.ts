@@ -62,8 +62,12 @@ export class BusinessService {
   }
 
   // Update business
-  static async updateBusiness(businessId: string, businessData: Partial<BusinessFormData>): Promise<Business> {
-    const response = await apiClient.put(`/businesses/${businessId}`, businessData);
+  static async updateBusiness(businessId: string, businessData: Partial<BusinessFormData>, vendorPhone?: string): Promise<Business> {
+    const headers: any = {};
+    if (vendorPhone) {
+      headers['X-Vendor-Phone'] = vendorPhone;
+    }
+    const response = await apiClient.put(`/businesses/${businessId}`, businessData, { headers });
     return response.data;
   }
 
@@ -109,6 +113,16 @@ export class BusinessService {
     const response = await apiClient.get('/businesses/nearby', {
       params: { latitude, longitude, radiusKm },
     });
+    return response.data;
+  }
+
+  // Geocode an address to get latitude and longitude
+  static async geocodeAddress(address: string): Promise<{
+    address: string;
+    latitude: number;
+    longitude: number;
+  }> {
+    const response = await apiClient.post('/businesses/geocode', { address });
     return response.data;
   }
 }

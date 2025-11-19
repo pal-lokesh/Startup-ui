@@ -30,6 +30,9 @@ import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { OrderFormData } from '../types/cart';
 import orderService from '../services/orderService';
+import DatePickerDialog from './DatePickerDialog';
+import { CalendarToday as CalendarIcon } from '@mui/icons-material';
+import { format } from 'date-fns';
 
 interface CartProps {
   open: boolean;
@@ -38,9 +41,11 @@ interface CartProps {
 }
 
 const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
-  const { cart, removeFromCart, updateQuantity, clearCart } = useCart();
+  const { cart, removeFromCart, updateQuantity, updateBookingDate, clearCart } = useCart();
   const { user } = useAuth();
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [selectedItemForDate, setSelectedItemForDate] = useState<{ id: string; type: 'theme' | 'inventory' | 'plate' | 'dish' } | null>(null);
   const [orderForm, setOrderForm] = useState<OrderFormData>({
     customerName: '',
     customerEmail: '',
@@ -52,7 +57,7 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
 
-  const handleQuantityChange = (itemId: string, itemType: 'theme' | 'inventory' | 'plate', newQuantity: number) => {
+  const handleQuantityChange = (itemId: string, itemType: 'theme' | 'inventory' | 'plate' | 'dish', newQuantity: number) => {
     if (newQuantity <= 0) {
       removeFromCart(itemId, itemType);
     } else {
@@ -60,7 +65,57 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
     }
   };
 
+  const handleDatePickerOpen = (itemId: string, itemType: 'theme' | 'inventory' | 'plate' | 'dish') => {
+    setSelectedItemForDate({ id: itemId, type: itemType });
+    setDatePickerOpen(true);
+  };
+
+  const handleDateConfirm = (date: string | undefined) => {
+    if (selectedItemForDate) {
+      updateBookingDate(selectedItemForDate.id, selectedItemForDate.type, date);
+    }
+    setDatePickerOpen(false);
+    setSelectedItemForDate(null);
+  };
+
   const handleCheckout = () => {
+    // Auto-fill form with user details and earliest booking date
+    const userFullName = user?.firstName && user?.lastName 
+      ? `${user.firstName} ${user.lastName}`.trim()
+      : user?.firstName || user?.lastName || '';
+    
+    // Find the earliest booking date from cart items
+    let earliestBookingDate = '';
+    if (cart.items.length > 0) {
+      const bookingDates = cart.items
+        .map(item => item.bookingDate)
+        .filter((date): date is string => date !== undefined && date !== null && date !== '');
+      
+      if (bookingDates.length > 0) {
+        // Sort dates and get the earliest one
+        bookingDates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        earliestBookingDate = bookingDates[0];
+      } else {
+        // If no booking dates, use today's date as default
+        const today = new Date();
+        earliestBookingDate = today.toISOString().split('T')[0];
+      }
+    } else {
+      // If cart is empty, use today's date
+      const today = new Date();
+      earliestBookingDate = today.toISOString().split('T')[0];
+    }
+    
+    // Auto-fill form with user details
+    setOrderForm({
+      customerName: userFullName,
+      customerEmail: user?.email || '',
+      customerPhone: user?.phoneNumber || '',
+      deliveryAddress: orderForm.deliveryAddress || '', // Keep existing address if any
+      deliveryDate: earliestBookingDate,
+      specialNotes: orderForm.specialNotes || '', // Keep existing notes if any
+    });
+    
     setCheckoutDialogOpen(true);
   };
 
@@ -85,7 +140,20 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
         onCheckout();
       }
     } catch (error: any) {
-      setOrderError(error.message || 'Failed to create order. Please try again.');
+      console.error('Order creation error:', error);
+      // Try to extract a more detailed error message
+      let errorMessage = 'Failed to create order. Please try again.';
+      
+      // The error from orderService.createOrder should already have the message
+      if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // Log the full error for debugging
+      console.error('Full error object:', error);
+      console.error('Error message:', errorMessage);
+      
+      setOrderError(errorMessage);
     } finally {
       setOrderLoading(false);
     }
@@ -99,7 +167,7 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
   };
 
   const getItemImage = (item: any) => {
-    if (item.type === 'plate' && item.image) {
+    if ((item.type === 'plate' || item.type === 'dish') && item.image) {
       return item.image;
     }
     return '/api/placeholder/80/80';
@@ -160,6 +228,23 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
                           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                             {item.description}
                           </Typography>
+                          {/* Display selected dishes for plates */}
+                          {item.type === 'plate' && item.selectedDishes && item.selectedDishes.length > 0 && (
+                            <Box sx={{ mb: 1, pl: 1, borderLeft: '2px solid', borderColor: 'primary.main' }}>
+                              <Typography variant="caption" color="text.secondary" fontWeight="bold" display="block" gutterBottom>
+                                Selected Dishes:
+                              </Typography>
+                              {item.selectedDishes.map((dish, idx) => (
+                                <Typography key={idx} variant="caption" color="text.secondary" display="block">
+                                  • {dish.dishName} (Qty: {dish.quantity}) - {formatPrice(dish.dishPrice * dish.quantity)}
+                                </Typography>
+                              ))}
+                              <Typography variant="caption" color="primary" fontWeight="bold" display="block" sx={{ mt: 0.5 }}>
+                                Plate: {formatPrice(item.price - item.selectedDishes.reduce((sum, d) => sum + d.dishPrice * d.quantity, 0))} + 
+                                Dishes: {formatPrice(item.selectedDishes.reduce((sum, d) => sum + d.dishPrice * d.quantity, 0))}
+                              </Typography>
+                            </Box>
+                          )}
                           <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                             <Chip
                               label={item.type.toUpperCase()}
@@ -170,6 +255,30 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
                             <Typography variant="h6" color="primary">
                               {formatPrice(item.price)} each
                             </Typography>
+                          </Box>
+                          {/* Booking Date */}
+                          <Box display="flex" alignItems="center" gap={1} mt={1}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<CalendarIcon />}
+                              onClick={() => handleDatePickerOpen(item.id, item.type)}
+                              sx={{ textTransform: 'none' }}
+                            >
+                              {item.bookingDate
+                                ? `Date: ${format(new Date(item.bookingDate), 'MMM dd, yyyy')}`
+                                : 'Select Date'}
+                            </Button>
+                            {item.bookingDate && (
+                              <Button
+                                size="small"
+                                variant="text"
+                                color="error"
+                                onClick={() => updateBookingDate(item.id, item.type, undefined)}
+                              >
+                                Clear
+                              </Button>
+                            )}
                           </Box>
                         </Box>
                       </Box>
@@ -294,7 +403,10 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
       {/* Checkout Dialog */}
       <Dialog
         open={checkoutDialogOpen}
-        onClose={() => setCheckoutDialogOpen(false)}
+        onClose={() => {
+          setCheckoutDialogOpen(false);
+          setOrderError(null); // Clear any errors when closing
+        }}
         maxWidth="sm"
         fullWidth
       >
@@ -375,6 +487,24 @@ const Cart: React.FC<CartProps> = ({ open, onClose, onCheckout }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Date Picker Dialog */}
+      {selectedItemForDate && (
+        <DatePickerDialog
+          open={datePickerOpen}
+          onClose={() => {
+            setDatePickerOpen(false);
+            setSelectedItemForDate(null);
+          }}
+          onConfirm={handleDateConfirm}
+          itemId={selectedItemForDate.id}
+          itemType={selectedItemForDate.type}
+          currentDate={cart.items.find(
+            item => item.id === selectedItemForDate.id && item.type === selectedItemForDate.type
+          )?.bookingDate}
+          title="Select Booking Date"
+        />
+      )}
     </>
   );
 };

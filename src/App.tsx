@@ -15,7 +15,9 @@ import UserManagement from './pages/UserManagement';
 import VendorManagement from './pages/VendorManagement';
 import BusinessManagement from './pages/BusinessManagement';
 import ThemeManagement from './pages/ThemeManagement';
+import PlateManagement from './pages/PlateManagement';
 import ImageManagement from './pages/ImageManagement';
+import AvailabilityManagement from './pages/AvailabilityManagement';
 import ExploreThemes from './pages/ExploreThemes';
 import ClientExplore from './pages/ClientExploreNew';
 import ClientDashboard from './pages/ClientDashboard';
@@ -24,6 +26,7 @@ import VendorChat from './pages/VendorChat';
 import ClientRatings from './pages/ClientRatings';
 import Unauthorized from './pages/Unauthorized';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import VendorOrdersNotifications from './pages/VendorOrdersNotifications';
 
 // Components
 import Navigation from './components/Navigation';
@@ -34,6 +37,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 // Context
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
+import { NotificationProvider } from './contexts/NotificationContext';
+import { VendorNotificationProvider } from './contexts/VendorNotificationContext';
 
 // Create responsive Material-UI theme
 const theme = createResponsiveTheme();
@@ -114,6 +119,11 @@ const AppContent: React.FC = () => {
               <VendorDashboard />
             </ProtectedRoute>
           } />
+          <Route path="/vendor-orders-notifications" element={
+            <ProtectedRoute requiredUserType="VENDOR">
+              <VendorOrdersNotifications />
+            </ProtectedRoute>
+          } />
           <Route path="/users" element={
             <ProtectedRoute requiredRole="ADMIN">
               <UserManagement />
@@ -130,8 +140,18 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           } />
           <Route path="/themes" element={
-            <ProtectedRoute requiredRole="ADMIN">
+            <ProtectedRoute requiredRole="ADMIN" requiredUserType="VENDOR">
               <ThemeManagement />
+            </ProtectedRoute>
+          } />
+          <Route path="/plates" element={
+            <ProtectedRoute requiredRole="ADMIN" requiredUserType="VENDOR">
+              <PlateManagement />
+            </ProtectedRoute>
+          } />
+          <Route path="/availability" element={
+            <ProtectedRoute requiredUserType="VENDOR">
+              <AvailabilityManagement />
             </ProtectedRoute>
           } />
           <Route path="/explore" element={
@@ -190,9 +210,13 @@ function App() {
       <CssBaseline />
       <AuthProvider>
         <CartProvider>
-          <Router>
-            <AppContent />
-          </Router>
+          <NotificationProvider>
+            <VendorNotificationProvider>
+              <Router>
+                <AppContent />
+              </Router>
+            </VendorNotificationProvider>
+          </NotificationProvider>
         </CartProvider>
       </AuthProvider>
     </ThemeProvider>

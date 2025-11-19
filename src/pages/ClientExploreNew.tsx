@@ -18,6 +18,7 @@ import {
   Button,
   IconButton,
   Tooltip,
+  Slider,
 } from '@mui/material';
 import {
   Palette as PaletteIcon,
@@ -27,15 +28,17 @@ import {
   Chat as ChatIcon,
 } from '@mui/icons-material';
 
-import { Business, Theme, Inventory, Plate } from '../types';
+import { Business, Theme, Inventory, Plate, Dish } from '../types';
 import BusinessService from '../services/businessService';
 import ThemeService from '../services/themeService';
 import InventoryService from '../services/inventoryService';
 import plateService from '../services/plateService';
+import dishService from '../services/dishService';
 import chatService from '../services/chatService';
 import ThemeCard from '../components/ThemeCard';
 import InventoryCard from '../components/InventoryCard';
 import PlateCard from '../components/PlateCard';
+import DishCard from '../components/DishCard';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -49,7 +52,7 @@ import { ratingService } from '../services/ratingService';
 import { RatingStats } from '../types/rating';
 
 type LocationFilter = 'all' | 'nearby' | 'custom';
-type BudgetFilter = 'all' | 'under5k' | '5k-10k' | '10k-25k' | '25k-50k' | '50k-100k' | 'above100k' | 'custom';
+type BudgetFilter = 'all' | 'custom';
 type SortOrder = 'price-low' | 'price-high' | 'rating-high' | 'rating-low' | 'default';
 
 const ClientExplore: React.FC = () => {
@@ -58,6 +61,7 @@ const ClientExplore: React.FC = () => {
   const [themes, setThemes] = useState<Theme[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [plates, setPlates] = useState<Plate[]>([]);
+  const [dishes, setDishes] = useState<Dish[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -65,13 +69,15 @@ const ClientExplore: React.FC = () => {
   const [businessThemes, setBusinessThemes] = useState<{[key: string]: Theme[]}>({});
   const [businessInventory, setBusinessInventory] = useState<{[key: string]: Inventory[]}>({});
   const [businessPlates, setBusinessPlates] = useState<{[key: string]: Plate[]}>({});
+  const [businessDishes, setBusinessDishes] = useState<{[key: string]: Dish[]}>({});
   const [refreshKey, setRefreshKey] = useState(0);
   const [chatLoading, setChatLoading] = useState<{[key: string]: boolean}>({});
   
   // Location-based filtering state
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
-  const [locationFilter, setLocationFilter] = useState<LocationFilter>('nearby'); // Default to nearby
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>('all'); // Default to all
   const [customRadius, setCustomRadius] = useState<number>(10);
+  const [appliedRadius, setAppliedRadius] = useState<number>(10); // The radius that's actually applied
   const [locationLoading, setLocationLoading] = useState(false);
   const [businessDistances, setBusinessDistances] = useState<{[key: string]: number}>({});
   const [locationRequested, setLocationRequested] = useState(false); // Track if location was requested
@@ -80,12 +86,15 @@ const ClientExplore: React.FC = () => {
   const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>('all');
   const [customMinBudget, setCustomMinBudget] = useState<number>(0);
   const [customMaxBudget, setCustomMaxBudget] = useState<number>(100000);
+  const [appliedMinBudget, setAppliedMinBudget] = useState<number>(0); // The min budget that's actually applied
+  const [appliedMaxBudget, setAppliedMaxBudget] = useState<number>(100000); // The max budget that's actually applied
   const [sortOrder, setSortOrder] = useState<SortOrder>('default');
   
   // Rating stats state
   const [themeRatingStats, setThemeRatingStats] = useState<{[key: string]: RatingStats}>({});
   const [inventoryRatingStats, setInventoryRatingStats] = useState<{[key: string]: RatingStats}>({});
   const [plateRatingStats, setPlateRatingStats] = useState<{[key: string]: RatingStats}>({});
+  const [dishRatingStats, setDishRatingStats] = useState<{[key: string]: RatingStats}>({});
   const [ratingStatsLoading, setRatingStatsLoading] = useState(false);
   
   const { addToCart } = useCart();
@@ -115,22 +124,24 @@ const ClientExplore: React.FC = () => {
 
   useEffect(() => {
     loadRatingStats();
-  }, [themes, inventory, plates]);
+  }, [themes, inventory, plates, dishes]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [businessesData, themesData, inventoryData, platesData] = await Promise.all([
+      const [businessesData, themesData, inventoryData, platesData, dishesData] = await Promise.all([
         BusinessService.getAllBusinesses(),
         ThemeService.getAllThemes(),
         InventoryService.getAllInventory(),
-        plateService.getAllPlates()
+        plateService.getAllPlates(),
+        dishService.getAllDishes()
       ]);
       
       setBusinesses(businessesData);
       setThemes(themesData);
       setInventory(inventoryData);
       setPlates(platesData);
+      setDishes(dishesData);
       
       // Don't filter on initial load - show all businesses initially
       setFilteredBusinesses(businessesData);
@@ -165,6 +176,16 @@ const ClientExplore: React.FC = () => {
       });
       setBusinessPlates(platesByBusiness);
       
+      // Group dishes by business
+      const dishesByBusiness: {[key: string]: Dish[]} = {};
+      dishesData.forEach(dish => {
+        if (!dishesByBusiness[dish.businessId]) {
+          dishesByBusiness[dish.businessId] = [];
+        }
+        dishesByBusiness[dish.businessId].push(dish);
+      });
+      setBusinessDishes(dishesByBusiness);
+      
     } catch (err) {
       setError('Failed to fetch data');
       console.error('Error fetching data:', err);
@@ -175,7 +196,7 @@ const ClientExplore: React.FC = () => {
 
   // Load rating stats for all items
   const loadRatingStats = async () => {
-    if (themes.length === 0 && inventory.length === 0 && plates.length === 0) return;
+    if (themes.length === 0 && inventory.length === 0 && plates.length === 0 && dishes.length === 0) return;
     
     try {
       setRatingStatsLoading(true);
@@ -188,11 +209,15 @@ const ClientExplore: React.FC = () => {
       const plateStatsPromises = plates.map(plate =>
         ratingService.getRatingStats(plate.plateId, 'PLATE').catch(() => null)
       );
+      const dishStatsPromises = dishes.map(dish =>
+        ratingService.getRatingStats(dish.dishId, 'DISH').catch(() => null)
+      );
 
-      const [themeStatsResults, inventoryStatsResults, plateStatsResults] = await Promise.all([
+      const [themeStatsResults, inventoryStatsResults, plateStatsResults, dishStatsResults] = await Promise.all([
         Promise.all(themeStatsPromises),
         Promise.all(inventoryStatsPromises),
-        Promise.all(plateStatsPromises)
+        Promise.all(plateStatsPromises),
+        Promise.all(dishStatsPromises)
       ]);
 
       // Build rating stats maps
@@ -217,9 +242,17 @@ const ClientExplore: React.FC = () => {
         }
       });
 
+      const dishStatsMap: {[key: string]: RatingStats} = {};
+      dishes.forEach((dish, index) => {
+        if (dishStatsResults[index]) {
+          dishStatsMap[dish.dishId] = dishStatsResults[index]!;
+        }
+      });
+
       setThemeRatingStats(themeStatsMap);
       setInventoryRatingStats(inventoryStatsMap);
       setPlateRatingStats(plateStatsMap);
+      setDishRatingStats(dishStatsMap);
     } catch (err) {
       console.error('Error loading rating stats:', err);
     } finally {
@@ -290,10 +323,7 @@ const ClientExplore: React.FC = () => {
         const { latitude, longitude } = position.coords;
         setUserLocation({ lat: latitude, lon: longitude });
         setLocationLoading(false);
-        // Set to nearby filter if location is successfully obtained
-        if (locationFilter === 'all') {
-          setLocationFilter('nearby');
-        }
+        // Location is obtained but filter remains as user selected (default: 'all')
       },
       (error) => {
         console.error('Error getting location:', error);
@@ -333,7 +363,7 @@ const ClientExplore: React.FC = () => {
       return businessList;
     }
 
-    const radius = locationFilter === 'nearby' ? 5 : customRadius;
+    const radius = appliedRadius;
     
     return businessList
       .filter(business => {
@@ -356,7 +386,7 @@ const ClientExplore: React.FC = () => {
       return items;
     }
 
-    const radius = locationFilter === 'nearby' ? 5 : customRadius;
+    const radius = appliedRadius;
 
     return items
       .filter(item => {
@@ -377,28 +407,35 @@ const ClientExplore: React.FC = () => {
     if (filter !== 'all' && !userLocation) {
       getCurrentLocation(true); // true = manual request
     }
+    if (filter === 'all') {
+      setAppliedRadius(10); // Reset applied radius when switching to all
+    }
+  };
+
+  const handleApplyCustomRadius = () => {
+    setAppliedRadius(customRadius);
+  };
+
+  const handleBudgetFilterChange = (filter: BudgetFilter) => {
+    setBudgetFilter(filter);
+    if (filter === 'all') {
+      setAppliedMinBudget(0);
+      setAppliedMaxBudget(100000);
+    }
+  };
+
+  const handleApplyCustomBudget = () => {
+    setAppliedMinBudget(customMinBudget);
+    setAppliedMaxBudget(customMaxBudget);
   };
 
   // Get budget range based on filter
   const getBudgetRange = (): { min: number; max: number } => {
-    switch (budgetFilter) {
-      case 'under5k':
-        return { min: 0, max: 5000 };
-      case '5k-10k':
-        return { min: 5000, max: 10000 };
-      case '10k-25k':
-        return { min: 10000, max: 25000 };
-      case '25k-50k':
-        return { min: 25000, max: 50000 };
-      case '50k-100k':
-        return { min: 50000, max: 100000 };
-      case 'above100k':
-        return { min: 100000, max: Infinity };
-      case 'custom':
-        return { min: customMinBudget, max: customMaxBudget };
-      default:
-        return { min: 0, max: Infinity };
+    if (budgetFilter === 'custom') {
+      return { min: appliedMinBudget, max: appliedMaxBudget };
     }
+    // For 'all', return full range
+    return { min: 0, max: Infinity };
   };
 
   // Get average rating for a theme
@@ -416,6 +453,12 @@ const ClientExplore: React.FC = () => {
   // Get average rating for plate
   const getPlateRating = (plateId: string): number => {
     const stats = plateRatingStats[plateId];
+    return stats?.averageRating || 0;
+  };
+
+  // Get average rating for dish
+  const getDishRating = (dishId: string): number => {
+    const stats = dishRatingStats[dishId];
     return stats?.averageRating || 0;
   };
 
@@ -514,6 +557,34 @@ const ClientExplore: React.FC = () => {
     return filtered;
   };
 
+  const filterAndSortDishes = (dishList: Dish[]): Dish[] => {
+    const budgetRange = getBudgetRange();
+    
+    let filtered = dishList.filter(dish => {
+      return isWithinBudget(dish.price, undefined, budgetRange.min, budgetRange.max);
+    });
+
+    if (sortOrder === 'price-low') {
+      filtered.sort((a, b) => a.price - b.price);
+    } else if (sortOrder === 'price-high') {
+      filtered.sort((a, b) => b.price - a.price);
+    } else if (sortOrder === 'rating-high') {
+      filtered.sort((a, b) => {
+        const ratingA = getDishRating(a.dishId);
+        const ratingB = getDishRating(b.dishId);
+        return ratingB - ratingA; // High to low
+      });
+    } else if (sortOrder === 'rating-low') {
+      filtered.sort((a, b) => {
+        const ratingA = getDishRating(a.dishId);
+        const ratingB = getDishRating(b.dishId);
+        return ratingA - ratingB; // Low to high
+      });
+    }
+
+    return filtered;
+  };
+
   // Buy Now handlers
   // Note: The card components handle adding to cart and opening cart.
   // These handlers can be used for additional logic like notifications or analytics.
@@ -528,6 +599,11 @@ const ClientExplore: React.FC = () => {
   };
 
   const handlePlateBuyNow = (plate: Plate, business: Business) => {
+    // Item is already added to cart by the card component
+    // You can add additional logic here like showing a success message
+  };
+
+  const handleDishBuyNow = (dish: Dish, business: Business) => {
     // Item is already added to cart by the card component
     // You can add additional logic here like showing a success message
   };
@@ -688,31 +764,67 @@ const ClientExplore: React.FC = () => {
             <LocationOnIcon sx={{ mr: 1 }} />
             All Locations
           </ToggleButton>
-          <ToggleButton value="nearby" aria-label="nearby 5km">
-            <LocationOnIcon sx={{ mr: 1 }} />
-            Nearby (5km)
-          </ToggleButton>
           <ToggleButton value="custom" aria-label="custom radius">
             <LocationOnIcon sx={{ mr: 1 }} />
-            Within {customRadius}km
+            Custom Radius
           </ToggleButton>
         </ToggleButtonGroup>
         {locationFilter === 'custom' && (
-          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="body2" sx={{ color: 'white' }}>
-              Radius:
-            </Typography>
-            <input
-              type="range"
-              min="1"
-              max="50"
-              value={customRadius}
-              onChange={(e) => setCustomRadius(Number(e.target.value))}
-              style={{ flex: 1, maxWidth: '300px' }}
-            />
-            <Typography variant="body2" sx={{ color: 'white', minWidth: '50px' }}>
-              {customRadius}km
-            </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Box sx={{ px: 1, mb: 2 }}>
+              <Slider
+                value={customRadius}
+                onChange={(e, newValue) => setCustomRadius(newValue as number)}
+                min={1}
+                max={50}
+                step={1}
+                marks={[
+                  { value: 1, label: '1km' },
+                  { value: 10, label: '10km' },
+                  { value: 25, label: '25km' },
+                  { value: 50, label: '50km' },
+                ]}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}km`}
+                sx={{
+                  color: 'white',
+                  '& .MuiSlider-thumb': {
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      boxShadow: '0 0 0 8px rgba(255, 255, 255, 0.16)',
+                    },
+                  },
+                  '& .MuiSlider-track': {
+                    backgroundColor: 'white',
+                  },
+                  '& .MuiSlider-rail': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                  },
+                  '& .MuiSlider-markLabel': {
+                    color: 'white',
+                  },
+                  '& .MuiSlider-valueLabel': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    color: '#f5576c',
+                    fontWeight: 'bold',
+                  },
+                }}
+              />
+            </Box>
+            <Button
+              variant="contained"
+              onClick={handleApplyCustomRadius}
+              sx={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.3)',
+                },
+                fontWeight: 'bold',
+              }}
+            >
+              Apply Filter ({customRadius}km)
+            </Button>
           </Box>
         )}
       </Paper>
@@ -773,7 +885,7 @@ const ClientExplore: React.FC = () => {
         <ToggleButtonGroup
           value={budgetFilter}
           exclusive
-          onChange={(e, value) => value !== null && setBudgetFilter(value)}
+          onChange={(e, value) => value !== null && handleBudgetFilterChange(value)}
           aria-label="budget filter"
           sx={{
             flexWrap: 'wrap',
@@ -799,72 +911,70 @@ const ClientExplore: React.FC = () => {
             <AttachMoneyIcon sx={{ mr: 1 }} />
             All Prices
           </ToggleButton>
-          <ToggleButton value="under5k" aria-label="under 5k">
-            Under ₹5,000
-          </ToggleButton>
-          <ToggleButton value="5k-10k" aria-label="5k to 10k">
-            ₹5,000 - ₹10,000
-          </ToggleButton>
-          <ToggleButton value="10k-25k" aria-label="10k to 25k">
-            ₹10,000 - ₹25,000
-          </ToggleButton>
-          <ToggleButton value="25k-50k" aria-label="25k to 50k">
-            ₹25,000 - ₹50,000
-          </ToggleButton>
-          <ToggleButton value="50k-100k" aria-label="50k to 100k">
-            ₹50,000 - ₹100,000
-          </ToggleButton>
-          <ToggleButton value="above100k" aria-label="above 100k">
-            Above ₹100,000
-          </ToggleButton>
           <ToggleButton value="custom" aria-label="custom budget">
             Custom Range
           </ToggleButton>
         </ToggleButtonGroup>
         {budgetFilter === 'custom' && (
-          <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" sx={{ color: 'white', minWidth: '80px' }}>
-                Min: {formatPrice(customMinBudget)}
-              </Typography>
-              <input
-                type="range"
-                min="0"
-                max={customMaxBudget}
-                step="1000"
-                value={customMinBudget}
-                onChange={(e) => {
-                  const newMin = Number(e.target.value);
-                  if (newMin <= customMaxBudget) {
-                    setCustomMinBudget(newMin);
-                  }
+          <Box sx={{ mt: 2 }}>
+            <Box sx={{ px: 1, mb: 2 }}>
+              <Slider
+                value={[customMinBudget, customMaxBudget]}
+                onChange={(e, newValue) => {
+                  const [min, max] = newValue as number[];
+                  setCustomMinBudget(min);
+                  setCustomMaxBudget(max);
                 }}
-                style={{ flex: 1, maxWidth: '200px' }}
+                min={0}
+                max={200000}
+                step={1000}
+                marks={[
+                  { value: 0, label: '₹0' },
+                  { value: 50000, label: '₹50k' },
+                  { value: 100000, label: '₹1 lac' },
+                  { value: 200000, label: '₹200k' },
+                ]}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => formatPrice(value)}
+                sx={{
+                  color: 'white',
+                  '& .MuiSlider-thumb': {
+                    backgroundColor: 'white',
+                    '&:hover': {
+                      boxShadow: '0 0 0 8px rgba(255, 255, 255, 0.16)',
+                    },
+                  },
+                  '& .MuiSlider-track': {
+                    backgroundColor: 'white',
+                  },
+                  '& .MuiSlider-rail': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                  },
+                  '& .MuiSlider-markLabel': {
+                    color: 'white',
+                  },
+                  '& .MuiSlider-valueLabel': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    color: '#00f2fe',
+                    fontWeight: 'bold',
+                  },
+                }}
               />
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" sx={{ color: 'white', minWidth: '80px' }}>
-                Max: {formatPrice(customMaxBudget)}
-              </Typography>
-              <input
-                type="range"
-                min={customMinBudget}
-                max="200000"
-                step="1000"
-                value={customMaxBudget}
-                onChange={(e) => {
-                  const newMax = Number(e.target.value);
-                  if (newMax >= customMinBudget) {
-                    setCustomMaxBudget(newMax);
-                  }
-                }}
-                style={{ flex: 1, maxWidth: '200px' }}
-              />
-            </Box>
-            <Chip
-              label={`${formatPrice(customMinBudget)} - ${formatPrice(customMaxBudget)}`}
-              sx={{ backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', fontWeight: 'bold' }}
-            />
+            <Button
+              variant="contained"
+              onClick={handleApplyCustomBudget}
+              sx={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.3)',
+                },
+                fontWeight: 'bold',
+              }}
+            >
+              Apply Filter ({formatPrice(customMinBudget)} - {formatPrice(customMaxBudget)})
+            </Button>
           </Box>
         )}
       </Paper>
@@ -889,9 +999,14 @@ const ClientExplore: React.FC = () => {
                 businessPlates[business.businessId] || []
               )
             );
+            const businessDishesList = filterAndSortDishes(
+              sortItemsByDistance(
+                businessDishes[business.businessId] || []
+              )
+            );
             
             // Skip businesses with no content
-            if (businessThemesList.length === 0 && businessInventoryList.length === 0 && businessPlatesList.length === 0) return null;
+            if (businessThemesList.length === 0 && businessInventoryList.length === 0 && businessPlatesList.length === 0 && businessDishesList.length === 0) return null;
             
             const distance = businessDistances[business.businessId];
             
@@ -945,7 +1060,7 @@ const ClientExplore: React.FC = () => {
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, flexWrap: 'wrap' }}>
                       <Typography variant="h5" color="text.secondary">
-                        {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items • {businessPlatesList.length} Plates
+                        {business.businessCategory} • {businessThemesList.length} Themes • {businessInventoryList.length} Items • {businessPlatesList.length} Plates • {businessDishesList.length} Dishes
                       </Typography>
                       {distance !== undefined && userLocation && (
                         <Chip
@@ -1109,6 +1224,58 @@ const ClientExplore: React.FC = () => {
                       </Box>
                     </Box>
                   )}
+
+                  {/* Show dishes if available */}
+                  {businessDishesList.length > 0 && (
+                    <Box sx={{ mb: 4 }}>
+                      <Typography variant="h5" gutterBottom sx={{ mb: 3, color: 'primary.main' }}>
+                        🍲 Dishes
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'flex',
+                        gap: 2,
+                        overflowX: 'auto',
+                        scrollBehavior: 'smooth',
+                        pb: 2,
+                        '&::-webkit-scrollbar': {
+                          height: 8,
+                        },
+                        '&::-webkit-scrollbar-track': {
+                          backgroundColor: 'rgba(0,0,0,0.1)',
+                          borderRadius: 4,
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                          backgroundColor: 'rgba(0,0,0,0.3)',
+                          borderRadius: 4,
+                          '&:hover': {
+                            backgroundColor: 'rgba(0,0,0,0.5)',
+                          },
+                        },
+                      }}>
+                        {businessDishesList.map((dish) => (
+                          <Box
+                            key={dish.dishId}
+                            sx={{
+                              minWidth: '280px',
+                              maxWidth: '280px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <DishCard 
+                              dish={dish} 
+                              business={business}
+                              onEdit={() => {}} 
+                              onDelete={() => {}} 
+                              onUpdate={() => {}} 
+                              onBuyNow={handleDishBuyNow}
+                              showCartButton={true}
+                              showBuyNowButton={true}
+                            />
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
                 </Box>
               </Slide>
             );
@@ -1134,7 +1301,12 @@ const ClientExplore: React.FC = () => {
                   businessPlates[business.businessId] || []
                 )
               );
-              if (businessPlatesList.length === 0) return null;
+              const businessDishesList = filterAndSortDishes(
+                sortItemsByDistance(
+                  businessDishes[business.businessId] || []
+                )
+              );
+              if (businessPlatesList.length === 0 && businessDishesList.length === 0) return null;
               
               const distance = businessDistances[business.businessId];
               
@@ -1188,7 +1360,7 @@ const ClientExplore: React.FC = () => {
                       </Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
                         <Typography variant="h6" color="text.secondary">
-                          {business.businessCategory} • {businessPlatesList.length} Plate{businessPlatesList.length !== 1 ? 's' : ''} Available
+                          {business.businessCategory} • {businessPlatesList.length} Plate{businessPlatesList.length !== 1 ? 's' : ''} • {businessDishesList.length} Dish{businessDishesList.length !== 1 ? 'es' : ''} Available
                         </Typography>
                         {distance !== undefined && userLocation && (
                           <Chip
@@ -1234,13 +1406,69 @@ const ClientExplore: React.FC = () => {
                         >
                           <PlateCard 
                             plate={plate} 
+                            business={business}
                             onEdit={() => {}} 
                             onDelete={() => {}} 
                             onUpdate={() => {}} 
+                            onBuyNow={handlePlateBuyNow}
+                            showCartButton={true}
+                            showBuyNowButton={true}
                           />
                         </Box>
                       ))}
                     </Box>
+
+                    {/* Dishes List */}
+                    {businessDishesList.length > 0 && (
+                      <Box sx={{ mt: 4 }}>
+                        <Typography variant="h5" gutterBottom sx={{ mb: 3, color: 'primary.main' }}>
+                          🍲 Dishes
+                        </Typography>
+                        <Box sx={{ 
+                          display: 'flex',
+                          gap: 2,
+                          overflowX: 'auto',
+                          scrollBehavior: 'smooth',
+                          pb: 2,
+                          '&::-webkit-scrollbar': {
+                            height: 8,
+                          },
+                          '&::-webkit-scrollbar-track': {
+                            backgroundColor: 'rgba(0,0,0,0.1)',
+                            borderRadius: 4,
+                          },
+                          '&::-webkit-scrollbar-thumb': {
+                            backgroundColor: 'rgba(0,0,0,0.3)',
+                            borderRadius: 4,
+                            '&:hover': {
+                              backgroundColor: 'rgba(0,0,0,0.5)',
+                            },
+                          },
+                        }}>
+                          {businessDishesList.map((dish) => (
+                            <Box
+                              key={dish.dishId}
+                              sx={{
+                                minWidth: '280px',
+                                maxWidth: '280px',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <DishCard 
+                                dish={dish} 
+                                business={business}
+                                onEdit={() => {}} 
+                                onDelete={() => {}} 
+                                onUpdate={() => {}} 
+                                onBuyNow={handleDishBuyNow}
+                                showCartButton={true}
+                                showBuyNowButton={true}
+                              />
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
                   </Box>
                 </Slide>
               );
@@ -1248,7 +1476,7 @@ const ClientExplore: React.FC = () => {
             
             
             {/* No data message */}
-            {filteredBusinesses.length === 0 && plates.length === 0 && (
+            {filteredBusinesses.length === 0 && plates.length === 0 && dishes.length === 0 && (
               <Box textAlign="center" py={4}>
                 <Typography variant="h6" color="text.secondary" gutterBottom>
                   No catering businesses found

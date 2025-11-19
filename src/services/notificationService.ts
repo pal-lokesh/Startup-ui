@@ -16,6 +16,7 @@ class NotificationService {
       const response = await fetch(`${API_BASE_URL}/vendor/${vendorPhone}`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
+        cache: 'no-cache', // Ensure fresh data on every request
       });
 
       if (!response.ok) {
@@ -52,6 +53,7 @@ class NotificationService {
       const response = await fetch(`${API_BASE_URL}/vendor/${vendorPhone}/count`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
+        cache: 'no-cache', // Ensure fresh data on every request
       });
 
       if (!response.ok) {

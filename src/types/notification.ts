@@ -10,7 +10,7 @@ export interface Notification {
   totalAmount: number;
   deliveryDate: string;
   deliveryAddress: string;
-  notificationType: 'ORDER_CONFIRMED' | 'ORDER_PREPARING' | 'ORDER_READY' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED' | 'ORDER_CANCELLED';
+  notificationType: 'ORDER_CONFIRMED' | 'ORDER_PREPARING' | 'ORDER_READY' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED' | 'ORDER_CANCELLED' | 'STOCK_AVAILABLE';
   isRead: boolean;
   message: string;
   createdAt: string;

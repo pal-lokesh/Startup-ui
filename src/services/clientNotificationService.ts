@@ -16,6 +16,7 @@ class ClientNotificationService {
       const response = await fetch(`${API_BASE_URL}/client/${clientPhone}`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
+        cache: 'no-cache', // Ensure fresh data
       });
 
       if (!response.ok) {

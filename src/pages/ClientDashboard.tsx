@@ -27,7 +27,6 @@ import {
   Stepper,
   Step,
   StepLabel,
-  StepContent,
 } from '@mui/material';
 import {
   ShoppingCart as ShoppingCartIcon,
@@ -39,12 +38,14 @@ import {
   Notifications as NotificationIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
+import { useLocation } from 'react-router-dom';
 import orderService from '../services/orderService';
-import clientNotificationService from '../services/clientNotificationService';
 import OrderHistory from '../components/OrderHistory';
-import OrderSummary from '../components/OrderSummary';
 import OrderStatusTracker from '../components/OrderStatusTracker';
+import OrderSummary from '../components/OrderSummary';
 import { Order } from '../types/cart';
+import { getOrderDisplayTitle } from '../utils/orderDisplay';
 import { Notification } from '../types/notification';
 
 interface TabPanelProps {
@@ -71,21 +72,46 @@ function TabPanel(props: TabPanelProps) {
 
 const ClientDashboard: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const { notifications, unreadCount: unreadNotificationCount, markAsRead, markAllAsRead, refreshNotifications } = useNotifications();
   const [activeTab, setActiveTab] = useState(0);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderDetailOpen, setOrderDetailOpen] = useState(false);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  // Ensure orders is always an array
+  const ordersArray = Array.isArray(orders) ? orders : [];
+
+  // Handle navigation state to set active tab
+  useEffect(() => {
+    const state = location.state as { activeTab?: number; orderId?: number; notificationId?: number } | null;
+    if (state?.activeTab !== undefined) {
+      setActiveTab(state.activeTab);
+      
+      // If navigating to My Orders tab (index 1) from a notification, refresh orders
+      // but don't auto-open the dialog - let user see all orders first
+      if (state.activeTab === 1) {
+        fetchOrders();
+      }
+      
+      // Don't auto-open order detail dialog - let user see all orders first
+      // They can click on a specific order from the list if they want details
+      
+      // Clear the state to prevent re-triggering
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (user?.phoneNumber) {
       fetchOrders();
-      fetchNotifications();
     }
   }, [user]);
+
+  // NotificationContext handles all notification fetching and syncing
+  // No need for separate useEffect hooks here
 
   const fetchOrders = async () => {
     if (!user?.phoneNumber) return;
@@ -94,38 +120,65 @@ const ClientDashboard: React.FC = () => {
       setLoading(true);
       setError(null);
       const ordersData = await orderService.getOrdersByUserId(user.phoneNumber);
-      setOrders(ordersData);
+      
+      // Ensure ordersData is always an array
+      const ordersArray = Array.isArray(ordersData) ? ordersData : [];
+      
+      console.log(`Setting ${ordersArray.length} orders in state`);
+      
+      // Always set orders, even if empty array
+      setOrders(ordersArray);
+      
+      if (ordersArray.length === 0) {
+        console.log('No orders found for user:', user.phoneNumber);
+      }
     } catch (err: any) {
       console.error('Error fetching orders:', err);
       setError(err.message || 'Failed to fetch orders');
+      // Set empty array on error to prevent stale data
+      setOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchNotifications = async () => {
-    if (!user?.phoneNumber) return;
-    
+  const handleNotificationClick = async (notification: Notification) => {
+    // Always mark as read when notification is clicked/opened
+    // The backend will handle if it's already read
     try {
-      const notificationsData = await clientNotificationService.getNotificationsByClient(user.phoneNumber);
-      setNotifications(notificationsData);
-      const unreadCount = notificationsData.filter(n => !n.isRead).length;
-      setUnreadNotificationCount(unreadCount);
+      await markAsRead(notification.notificationId);
     } catch (err: any) {
-      console.error('Error fetching notifications:', err);
+      console.error('Error marking notification as read:', err);
+      // Continue to order details even if marking as read fails
+    }
+    
+    // If notification has an orderId, switch to My Orders tab to show all orders
+    // User can then click on the specific order if they want details
+    if (notification.orderId) {
+      setActiveTab(1); // Switch to My Orders tab (index 1)
+      // Refresh orders to ensure we have the latest data
+      fetchOrders();
+      // Don't open the dialog automatically - let user see all orders first
+      // They can click on the specific order from the list if needed
+    } else {
+      // If no orderId, switch to notifications tab
+      setActiveTab(2);
     }
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
     
+    // Close order detail dialog when switching tabs to ensure all orders are visible
+    if (orderDetailOpen) {
+      setOrderDetailOpen(false);
+      setSelectedOrder(null);
+    }
+    
     if (newValue === 1) { // Orders tab
       fetchOrders();
-    } else if (newValue === 2) { // Track Orders tab
-      fetchOrders();
-    } else if (newValue === 3) { // Notifications tab
-      fetchNotifications();
     }
+    // Notifications tab doesn't need manual refresh - NotificationContext handles it
   };
 
   const handleViewOrder = (order: Order) => {
@@ -164,15 +217,40 @@ const ClientDashboard: React.FC = () => {
 
   const getOrderSteps = (order: Order) => {
     const steps = [
-      { label: 'Order Placed', completed: true },
-      { label: 'Order Confirmed', completed: order.status !== 'PENDING' },
-      { label: 'Preparing', completed: ['PREPARING', 'READY', 'DELIVERED'].includes(order.status) },
-      { label: 'Ready for Delivery', completed: ['READY', 'DELIVERED'].includes(order.status) },
-      { label: 'Delivered', completed: order.status === 'DELIVERED' },
+      { 
+        label: 'Order Placed', 
+        completed: true,
+        description: `Order placed on ${new Date(order.orderDate).toLocaleString()}`,
+        icon: <ShoppingCartIcon />
+      },
+      { 
+        label: 'Order Confirmed', 
+        completed: order.status !== 'PENDING',
+        description: order.status !== 'PENDING' ? 'Order confirmed by vendor' : 'Waiting for confirmation',
+        icon: <CheckCircleIcon />
+      },
+      { 
+        label: 'Preparing', 
+        completed: ['PREPARING', 'READY', 'DELIVERED'].includes(order.status),
+        description: ['PREPARING', 'READY', 'DELIVERED'].includes(order.status) ? 'Your order is being prepared' : 'Waiting to start preparation',
+        icon: <RefreshIcon />
+      },
+      { 
+        label: 'Ready for Delivery', 
+        completed: ['READY', 'DELIVERED'].includes(order.status),
+        description: ['READY', 'DELIVERED'].includes(order.status) ? 'Order is ready for delivery' : 'Order is being prepared',
+        icon: <ShippingIcon />
+      },
+      { 
+        label: 'Delivered', 
+        completed: order.status === 'DELIVERED',
+        description: order.status === 'DELIVERED' ? 'Order has been delivered' : 'Order is ready for delivery',
+        icon: <CheckCircleIcon />
+      },
     ];
     
     if (order.status === 'CANCELLED') {
-      return steps.map(step => ({ ...step, completed: false }));
+      return steps.map(step => ({ ...step, completed: false, description: 'Order was cancelled' }));
     }
     
     return steps;
@@ -210,7 +288,7 @@ const ClientDashboard: React.FC = () => {
           startIcon={<RefreshIcon />}
           onClick={() => {
             fetchOrders();
-            fetchNotifications();
+            refreshNotifications();
           }}
         >
           Refresh
@@ -222,12 +300,11 @@ const ClientDashboard: React.FC = () => {
           <Tab label="Overview" />
           <Tab 
             label={
-              orders.length > 0 
-                ? `My Orders (${orders.length})` 
+              ordersArray.length > 0 
+                ? `My Orders (${ordersArray.length})` 
                 : "My Orders"
             } 
           />
-          <Tab label="Track Orders" />
           <Tab 
             label={
               unreadNotificationCount > 0 
@@ -240,50 +317,51 @@ const ClientDashboard: React.FC = () => {
 
       {/* Overview Tab */}
       <TabPanel value={activeTab} index={0}>
-        <OrderSummary orders={orders} />
+        <OrderSummary orders={ordersArray} />
       </TabPanel>
 
       {/* Orders Tab */}
       <TabPanel value={activeTab} index={1}>
+        {ordersArray.length > 0 && (
+          <Box sx={{ mb: 4 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <Typography variant="h5" component="h2">
+                Live Order Status ({ordersArray.length} {ordersArray.length === 1 ? 'order' : 'orders'})
+              </Typography>
+              <Button 
+                variant="outlined" 
+                onClick={() => {
+                  fetchOrders();
+                  refreshNotifications();
+                }}
+                disabled={loading}
+              >
+                Refresh Status
+              </Button>
+            </Box>
+            <Grid container spacing={3}>
+              {ordersArray.map((order) => (
+                <Grid item xs={12} key={order.orderId}>
+                  <OrderStatusTracker order={order} showDetails={false} />
+                </Grid>
+              ))}
+            </Grid>
+            <Divider sx={{ my: 4 }} />
+          </Box>
+        )}
         <OrderHistory 
-          orders={orders}
+          orders={ordersArray}
           loading={loading}
           onRefresh={() => {
             fetchOrders();
-            fetchNotifications();
+            refreshNotifications();
           }}
           onViewOrder={handleViewOrder}
         />
       </TabPanel>
 
-      {/* Track Orders Tab */}
+      {/* Notifications Tab (Separate) */}
       <TabPanel value={activeTab} index={2}>
-        {orders.length === 0 ? (
-          <Paper sx={{ p: 4, textAlign: 'center' }}>
-            <ShoppingCartIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary" gutterBottom>
-              No orders to track
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Place an order to start tracking its progress!
-            </Typography>
-          </Paper>
-        ) : (
-          <Grid container spacing={3}>
-            {orders.map((order) => (
-              <Grid item xs={12} key={order.orderId}>
-                <OrderStatusTracker 
-                  order={order} 
-                  showDetails={true}
-                />
-              </Grid>
-            ))}
-          </Grid>
-        )}
-      </TabPanel>
-
-      {/* Notifications Tab */}
-      <TabPanel value={activeTab} index={3}>
         {notifications.length === 0 ? (
           <Paper sx={{ p: 4, textAlign: 'center' }}>
             <NotificationIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
@@ -295,24 +373,90 @@ const ClientDashboard: React.FC = () => {
             </Typography>
           </Paper>
         ) : (
-          <List>
+          <Box>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+              <Box>
+                <Typography variant="h5" component="h2" gutterBottom>
+                  Notifications
+                </Typography>
+                {unreadNotificationCount > 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    {unreadNotificationCount} unread {unreadNotificationCount === 1 ? 'notification' : 'notifications'}
+                  </Typography>
+                )}
+              </Box>
+              <Box display="flex" gap={1}>
+                {unreadNotificationCount > 0 && (
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    size="small"
+                    onClick={async () => {
+                      try {
+                        await markAllAsRead();
+                      } catch (err: any) {
+                        console.error('Error marking all notifications as read:', err);
+                        setError(err.message || 'Failed to mark all notifications as read');
+                      }
+                    }}
+                  >
+                    Mark All as Read
+                  </Button>
+                )}
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<RefreshIcon />}
+                  onClick={refreshNotifications}
+                >
+                  Refresh
+                </Button>
+              </Box>
+            </Box>
+            <List>
             {notifications.map((notification) => (
-              <ListItem key={notification.notificationId} divider>
+              <ListItem 
+                key={notification.notificationId} 
+                divider
+                onClick={() => handleNotificationClick(notification)}
+                sx={{ 
+                  cursor: 'pointer',
+                  '&:hover': {
+                    backgroundColor: 'action.hover'
+                  },
+                  backgroundColor: !notification.isRead ? 'action.selected' : 'transparent'
+                }}
+              >
                 <ListItemAvatar>
                   <Avatar sx={{ bgcolor: notification.isRead ? 'grey.300' : 'primary.main' }}>
                     <NotificationIcon />
                   </Avatar>
                 </ListItemAvatar>
                 <ListItemText
-                  primary={notification.message}
+                  primary={
+                    <Typography 
+                      variant="body1" 
+                      sx={{ 
+                        fontWeight: notification.isRead ? 'normal' : 'bold',
+                        color: notification.isRead ? 'text.primary' : 'primary.main'
+                      }}
+                    >
+                      {notification.message}
+                    </Typography>
+                  }
                   secondary={
                     <Box>
                       <Typography variant="body2" color="text.secondary">
                         {new Date(notification.createdAt).toLocaleString()}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Order #{notification.orderId} • {notification.businessName}
+                        {notification.businessName}
                       </Typography>
+                      {notification.notificationType === 'STOCK_AVAILABLE' && notification.deliveryDate && (
+                        <Typography variant="body2" color="primary" sx={{ fontWeight: 'bold' }}>
+                          Available Date: {new Date(notification.deliveryDate).toLocaleDateString()}
+                        </Typography>
+                      )}
                     </Box>
                   }
                 />
@@ -324,6 +468,7 @@ const ClientDashboard: React.FC = () => {
               </ListItem>
             ))}
           </List>
+          </Box>
         )}
       </TabPanel>
 
@@ -335,7 +480,7 @@ const ClientDashboard: React.FC = () => {
         fullWidth
       >
         <DialogTitle>
-          Order #{selectedOrder?.orderId} Details
+          {`${getOrderDisplayTitle(selectedOrder || undefined)} Details`}
         </DialogTitle>
         <DialogContent>
           {selectedOrder && (
@@ -434,10 +579,62 @@ const ClientDashboard: React.FC = () => {
               <Typography variant="h6" gutterBottom>
                 Order Progress
               </Typography>
-              <Stepper orientation="vertical">
+              <Stepper 
+                orientation="horizontal"
+                sx={{ 
+                  mb: 3,
+                  '& .MuiStepLabel-root': {
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    '& .MuiStepLabel-label': {
+                      marginTop: 1,
+                      textAlign: 'center'
+                    }
+                  }
+                }}
+              >
                 {getOrderSteps(selectedOrder).map((step, index) => (
-                  <Step key={index} completed={step.completed}>
-                    <StepLabel>{step.label}</StepLabel>
+                  <Step 
+                    key={index} 
+                    completed={step.completed}
+                    active={!step.completed && index === getOrderSteps(selectedOrder).findIndex(s => !s.completed)}
+                  >
+                    <StepLabel 
+                      StepIconComponent={() => (
+                        <Avatar sx={{ 
+                          bgcolor: step.completed ? 'success.main' : 'grey.300',
+                          width: 48,
+                          height: 48,
+                          border: step.completed ? '3px solid #4caf50' : '3px solid #e0e0e0',
+                          boxShadow: step.completed ? '0 2px 8px rgba(76, 175, 80, 0.3)' : 'none'
+                        }}>
+                          {step.icon}
+                        </Avatar>
+                      )}
+                      sx={{
+                        '& .MuiStepLabel-label': {
+                          fontSize: '0.875rem',
+                          fontWeight: step.completed ? 'bold' : 'normal',
+                          color: step.completed ? 'success.main' : 'text.primary',
+                          mt: 1
+                        }
+                      }}
+                    >
+                      {step.label}
+                    </StepLabel>
+                    <Box sx={{ mt: 1, textAlign: 'center', px: 1 }}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                        {step.description}
+                      </Typography>
+                      {step.completed && (
+                        <Chip 
+                          label="✓" 
+                          size="small" 
+                          color="success" 
+                          sx={{ height: 20, fontSize: '0.7rem' }}
+                        />
+                      )}
+                    </Box>
                   </Step>
                 ))}
               </Stepper>

@@ -43,8 +43,10 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
     themeDescription: '',
     themeCategory: '',
     priceRange: '',
+    quantity: 0,
   });
   const [priceInput, setPriceInput] = useState<string>('');
+  const [quantityInput, setQuantityInput] = useState<string>('0');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
@@ -74,10 +76,12 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
         themeDescription: theme.themeDescription,
         themeCategory: theme.themeCategory,
         priceRange: theme.priceRange,
+        quantity: theme.quantity ?? 0,
       });
       // Extract numeric value from price range for editing
       const numericPrice = extractNumericPrice(theme.priceRange);
       setPriceInput(numericPrice.toString());
+      setQuantityInput((theme.quantity ?? 0).toString());
     } else {
       setFormData({
         businessId: businessId,
@@ -85,8 +89,10 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
         themeDescription: '',
         themeCategory: '',
         priceRange: '',
+        quantity: 0,
       });
       setPriceInput('');
+      setQuantityInput('0');
     }
     setError(null);
   }, [theme, businessId, open]);
@@ -145,6 +151,16 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
     setFormData(prev => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  const handleQuantityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setQuantityInput(value);
+    const quantity = parseInt(value) || 0;
+    setFormData(prev => ({
+      ...prev,
+      quantity: quantity,
     }));
   };
 
@@ -228,6 +244,7 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
     setUploadedImages([]);
     setImageUploading(false);
     setPriceInput('');
+    setQuantityInput('0');
     setError(null);
     onClose();
   };
@@ -302,6 +319,20 @@ const ThemeManagementForm: React.FC<ThemeManagementFormProps> = ({
                 inputProps={{ min: 0, step: 0.01 }}
                 placeholder="Enter price"
                 helperText={formData.priceRange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                name="quantity"
+                label="Quantity (Stock)"
+                value={quantityInput}
+                onChange={handleQuantityInputChange}
+                margin="normal"
+                inputProps={{ min: 0, step: 1 }}
+                placeholder="Enter available quantity"
+                helperText="Number of themes available in stock"
               />
             </Grid>
           </Grid>

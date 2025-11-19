@@ -32,13 +32,21 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole,
   }
 
   // Check role-based access if required
-  if (requiredRole && user?.role !== requiredRole) {
-    return <Navigate to="/unauthorized" replace />;
-  }
-
-  // Check user type-based access if required
-  if (requiredUserType && user?.userType !== requiredUserType) {
-    return <Navigate to="/unauthorized" replace />;
+  // If both requiredRole and requiredUserType are provided, allow access if EITHER condition is met (OR logic)
+  if (requiredRole && requiredUserType) {
+    const hasRequiredRole = user?.role === requiredRole;
+    const hasRequiredUserType = user?.userType === requiredUserType;
+    if (!hasRequiredRole && !hasRequiredUserType) {
+      return <Navigate to="/unauthorized" replace />;
+    }
+  } else {
+    // If only one is provided, use AND logic (must match)
+    if (requiredRole && user?.role !== requiredRole) {
+      return <Navigate to="/unauthorized" replace />;
+    }
+    if (requiredUserType && user?.userType !== requiredUserType) {
+      return <Navigate to="/unauthorized" replace />;
+    }
   }
 
   return <>{children}</>;

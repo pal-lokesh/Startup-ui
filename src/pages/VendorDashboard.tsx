@@ -32,8 +32,10 @@ import BusinessService from '../services/businessService';
 import ThemeService from '../services/themeService';
 import InventoryService from '../services/inventoryService';
 import PlateService from '../services/plateService';
-import { Business, Theme, Inventory, Plate } from '../types';
+import dishService from '../services/dishService';
+import { Business, Theme, Inventory, Plate, Dish } from '../types';
 import { Order } from '../types/cart';
+import { getOrderDisplayTitle } from '../utils/orderDisplay';
 import BusinessManagementForm from '../components/BusinessManagementForm';
 import ThemeManagement from '../components/ThemeManagement';
 import BusinessSelector from '../components/BusinessSelector';
@@ -43,22 +45,27 @@ import InventoryCard from '../components/InventoryCard';
 import InventoryImages from '../components/InventoryImages';
 import PlateManagementForm from '../components/PlateManagementForm';
 import PlateCard from '../components/PlateCard';
+import DishManagementForm from '../components/DishManagementForm';
+import DishCard from '../components/DishCard';
 import orderService from '../services/orderService';
 import notificationService from '../services/notificationService';
 import chatService from '../services/chatService';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const VendorDashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [plates, setPlates] = useState<Plate[]>([]);
+  const [dishes, setDishes] = useState<Dish[]>([]);
+  const [businessDishesCache, setBusinessDishesCache] = useState<Record<string, Dish[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState((location.state as any)?.activeTab ?? 0);
   const [businessFormOpen, setBusinessFormOpen] = useState(false);
   const [inventoryFormOpen, setInventoryFormOpen] = useState(false);
   const [editingInventory, setEditingInventory] = useState<Inventory | null>(null);
@@ -67,19 +74,48 @@ const VendorDashboard: React.FC = () => {
   const [inventoryRefreshTrigger, setInventoryRefreshTrigger] = useState(0);
   const [plateFormOpen, setPlateFormOpen] = useState(false);
   const [editingPlate, setEditingPlate] = useState<Plate | null>(null);
+  const [dishFormOpen, setDishFormOpen] = useState(false);
+  const [editingDish, setEditingDish] = useState<Dish | null>(null);
   
   // Order management state
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [orderToScrollTo, setOrderToScrollTo] = useState<string | null>(null);
+  const [savedScrollPosition, setSavedScrollPosition] = useState<number | null>(null);
   
   // Notification state
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [vendorNotifications, setVendorNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // Update activeTab when location state changes
+  useEffect(() => {
+    const stateActiveTab = (location.state as any)?.activeTab;
+    if (stateActiveTab !== undefined) {
+      console.log('Updating activeTab from location state:', stateActiveTab, 'Current activeTab:', activeTab);
+      setActiveTab(stateActiveTab);
+    }
+  }, [location]);
+
+  // Debug: Track dishes state changes
+  useEffect(() => {
+    console.log('🔄 Dishes state changed. Current count:', dishes.length);
+    if (dishes.length > 0) {
+      console.log('📋 Current dishes:', dishes.map(d => d.dishName || d.dishId));
+    }
+  }, [dishes]);
 
   useEffect(() => {
     const fetchVendorData = async () => {
-      if (!user?.phoneNumber) {
+      // Wait for user to be available
+      if (!user) {
+        setLoading(true);
+        return;
+      }
+
+      if (!user.phoneNumber) {
         setError('User phone number not available');
         setLoading(false);
         return;
@@ -87,6 +123,7 @@ const VendorDashboard: React.FC = () => {
 
       try {
         setLoading(true);
+        setError(null);
         
         // Get all businesses for this vendor
         const businessesData = await BusinessService.getBusinessesByVendorPhoneNumber(user.phoneNumber);
@@ -94,31 +131,78 @@ const VendorDashboard: React.FC = () => {
         
         // Auto-select first business if available
         if (businessesData.length > 0) {
-          setSelectedBusiness(businessesData[0]);
           const business = businessesData[0];
+          console.log('🔍 Selected business:', business.businessId, 'Category:', business.businessCategory);
+          setSelectedBusiness(business);
           
           // Fetch data based on business category
           if (business.businessCategory === 'caters') {
-            // For catering businesses, only fetch plates
-            const platesData = await PlateService.getPlatesByBusinessId(business.businessId);
-            setPlates(platesData);
-            setThemes([]);
-            setInventory([]);
+            // For catering businesses, fetch plates and dishes
+            try {
+              console.log('🍽️ Fetching plates and dishes for catering business:', business.businessId);
+              const [platesData, dishesData] = await Promise.all([
+                PlateService.getPlatesByBusinessId(business.businessId),
+                dishService.getDishesByBusinessId(business.businessId).catch(err => {
+                  console.error('❌ Error fetching dishes for business:', business.businessId, err);
+                  // On initial load, don't use cache (it's empty anyway), return empty array
+                  return [];
+                })
+              ]);
+              console.log('✅ Fetched dishes for business:', business.businessId, 'Count:', dishesData?.length || 0);
+              console.log('📦 Dishes data:', JSON.stringify(dishesData, null, 2));
+              
+              setPlates(platesData || []);
+              const dishesArray = Array.isArray(dishesData) ? dishesData : [];
+              console.log('💾 Setting dishes state with', dishesArray.length, 'items');
+              setDishes(dishesArray);
+              
+              // Always update cache with fetched data (even if empty)
+              setBusinessDishesCache((prev) => {
+                const updated = {
+                  ...prev,
+                  [business.businessId]: dishesArray,
+                };
+                console.log('💾 Updated cache for business:', business.businessId, 'with', dishesArray.length, 'items');
+                return updated;
+              });
+              setThemes([]);
+              setInventory([]);
+            } catch (err: any) {
+              console.error('Error fetching plates/dishes:', err);
+              // Set empty arrays but don't fail the entire operation
+              setPlates([]);
+              // On initial load, cache is empty, so just set empty array
+              setDishes([]);
+              setThemes([]);
+              setInventory([]);
+            }
           } else {
             // For non-catering businesses, fetch themes and inventory
-            const [themesData, inventoryData] = await Promise.all([
-              ThemeService.getThemesByBusinessId(business.businessId),
-              InventoryService.getInventoryByBusinessId(business.businessId)
-            ]);
-            setThemes(themesData);
-            setInventory(inventoryData);
-            setPlates([]);
+            try {
+              const [themesData, inventoryData] = await Promise.all([
+                ThemeService.getThemesByBusinessId(business.businessId),
+                InventoryService.getInventoryByBusinessId(business.businessId)
+              ]);
+              setThemes(themesData);
+              setInventory(inventoryData);
+              setPlates([]);
+              const cachedDishes = businessDishesCache[business.businessId] || [];
+              setDishes(cachedDishes);
+            } catch (err: any) {
+              console.error('Error fetching themes/inventory:', err);
+              // Set empty arrays but don't fail the entire operation
+              setThemes([]);
+              setInventory([]);
+              setPlates([]);
+              setDishes([]);
+            }
           }
         } else {
           setSelectedBusiness(null);
           setThemes([]);
           setInventory([]);
           setPlates([]);
+          setDishes([]);
         }
         
       } catch (err: any) {
@@ -140,12 +224,13 @@ const VendorDashboard: React.FC = () => {
 
     fetchVendorData();
     
-    // Fetch notification count
+    // Fetch notification count and notifications
     if (user?.phoneNumber) {
       fetchNotificationCount();
+      fetchVendorNotifications(); // Also fetch notifications on load
       fetchUnreadChatCount();
     }
-  }, [user?.phoneNumber]);
+  }, [user, user?.phoneNumber]);
 
   // Refresh unread counts when component mounts or user changes
   useEffect(() => {
@@ -164,11 +249,35 @@ const VendorDashboard: React.FC = () => {
     try {
       // Fetch data based on business category
       if (business.businessCategory === 'caters') {
-        // For catering businesses, only fetch plates
-        const platesData = await PlateService.getPlatesByBusinessId(business.businessId);
-        setPlates(platesData);
-        setThemes([]);
-        setInventory([]);
+        // For catering businesses, fetch plates and dishes
+        try {
+          const [platesData, dishesData] = await Promise.all([
+            PlateService.getPlatesByBusinessId(business.businessId),
+            dishService.getDishesByBusinessId(business.businessId).catch(err => {
+              console.warn('Error fetching dishes for business:', business.businessId, err);
+              // Return cached dishes if available, otherwise empty array
+              return businessDishesCache[business.businessId] || [];
+            })
+          ]);
+          console.log('handleBusinessSelect - Fetched dishes for business:', business.businessId, 'Count:', dishesData?.length || 0, dishesData);
+          setPlates(platesData);
+          setDishes(dishesData || []);
+          // Always update cache with fetched data (even if empty, to prevent stale cache)
+          setBusinessDishesCache((prev) => ({
+            ...prev,
+            [business.businessId]: dishesData || [],
+          }));
+          setThemes([]);
+          setInventory([]);
+        } catch (err) {
+          console.error('Error fetching plates/dishes:', err);
+          // Try to use cached data as fallback
+          const cachedDishes = businessDishesCache[business.businessId] || [];
+          setDishes(cachedDishes);
+          setPlates([]);
+          setThemes([]);
+          setInventory([]);
+        }
       } else {
         // For non-catering businesses, fetch themes and inventory
         const [themesData, inventoryData] = await Promise.all([
@@ -178,12 +287,16 @@ const VendorDashboard: React.FC = () => {
         setThemes(themesData);
         setInventory(inventoryData);
         setPlates([]);
+        setDishes([]);
       }
     } catch (err) {
       console.error('Error fetching business data:', err);
       setThemes([]);
       setInventory([]);
       setPlates([]);
+      // Try to use cached dishes if available
+      const cachedDishes = businessDishesCache[business.businessId] || [];
+      setDishes(cachedDishes);
     }
   };
 
@@ -332,6 +445,56 @@ const VendorDashboard: React.FC = () => {
     setPlates(plates.map(p => p.plateId === updatedPlate.plateId ? updatedPlate : p));
   };
 
+  const handleAddDish = () => {
+    setEditingDish(null);
+    setDishFormOpen(true);
+  };
+
+  const handleEditDish = (dish: Dish) => {
+    setEditingDish(dish);
+    setDishFormOpen(true);
+  };
+
+  const handleDishSuccess = async (updatedDish: Dish) => {
+    setDishFormOpen(false);
+    setEditingDish(null);
+    
+    // Update dishes list
+    const updatedDishes = dishes.some(d => d.dishId === updatedDish.dishId)
+      ? dishes.map(d => d.dishId === updatedDish.dishId ? updatedDish : d)
+      : [...dishes, updatedDish];
+    
+    setDishes(updatedDishes);
+    if (selectedBusiness) {
+      setBusinessDishesCache(prev => ({
+        ...prev,
+        [selectedBusiness.businessId]: updatedDishes,
+      }));
+    }
+  };
+
+  const handleDishDelete = (dishId: string) => {
+    const updatedDishes = dishes.filter(d => d.dishId !== dishId);
+    setDishes(updatedDishes);
+    if (selectedBusiness) {
+      setBusinessDishesCache(prev => ({
+        ...prev,
+        [selectedBusiness.businessId]: updatedDishes,
+      }));
+    }
+  };
+
+  const handleDishUpdate = (updatedDish: Dish) => {
+    const updatedDishes = dishes.map(d => d.dishId === updatedDish.dishId ? updatedDish : d);
+    setDishes(updatedDishes);
+    if (selectedBusiness) {
+      setBusinessDishesCache(prev => ({
+        ...prev,
+        [selectedBusiness.businessId]: updatedDishes,
+      }));
+    }
+  };
+
   const fetchNotificationCount = async () => {
     if (!user?.phoneNumber) return;
     
@@ -340,6 +503,38 @@ const VendorDashboard: React.FC = () => {
       setUnreadNotificationCount(count);
     } catch (err: any) {
       console.error('Error fetching notification count:', err);
+    }
+  };
+
+  const fetchVendorNotifications = async () => {
+    if (!user?.phoneNumber) return;
+    
+    try {
+      setLoadingNotifications(true);
+      const notifications = await notificationService.getNotificationsByVendor(user.phoneNumber);
+      // Sort by date, newest first
+      const sortedNotifications = notifications.sort((a: any, b: any) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setVendorNotifications(sortedNotifications);
+      setUnreadNotificationCount(notifications.filter((n: any) => !n.isRead).length);
+    } catch (err: any) {
+      console.error('Error fetching vendor notifications:', err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleMarkNotificationAsRead = async (notificationId: number) => {
+    try {
+      await notificationService.markAsRead(notificationId);
+      // Update local state
+      setVendorNotifications(prev => 
+        prev.map(n => n.notificationId === notificationId ? { ...n, isRead: true } : n)
+      );
+      setUnreadNotificationCount(prev => Math.max(0, prev - 1));
+    } catch (err: any) {
+      console.error('Error marking notification as read:', err);
     }
   };
 
@@ -354,25 +549,74 @@ const VendorDashboard: React.FC = () => {
     }
   };
 
+  // Helper function to check if business is tent type
+  const isTentBusiness = (business: Business | null): boolean => {
+    if (!business) return false;
+    const category = business.businessCategory?.toLowerCase() || '';
+    // More specific check - only match exact tent categories
+    return category === 'tent_house' || category === 'tent' || 
+           (category.includes('tent') && !category.includes('cater'));
+  };
+
   // Helper function to get the correct Orders tab index
+  // This must match the actual tab rendering order in the JSX
   const getOrdersTabIndex = () => {
-    if (!selectedBusiness) return -1;
-    let index = 1; // Start after Overview tab
-    if (selectedBusiness.businessCategory !== 'caters') {
-      index += 2; // Themes + Inventory tabs
-    } else {
-      index += 1; // Plates tab only
+    if (!selectedBusiness || isTentBusiness(selectedBusiness)) {
+      return -1; // Orders tab not shown for tent businesses
     }
+    
+    // Tab order in JSX:
+    // 0: Overview (always)
+    // 1: Theme (if tent) OR Themes (if not tent and not caters) OR Plate (if caters)
+    // 2: Inventory (if not tent and not caters) OR Dish (if caters) OR Orders (if not tent) OR Explore (if tent)
+    // 3: Orders (if not tent and not caters) OR Explore (if tent)
+    
+    let index = 1; // Start after Overview tab (index 0)
+    
+    if (selectedBusiness.businessCategory === 'caters') {
+      // For catering: Overview(0), Plate(1), Dish(2), Orders(3)
+      index = 3;
+    } else {
+      // For non-catering: Overview(0), Themes(1), Inventory(2), Orders(3)
+      index = 3;
+    }
+    
     return index;
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    console.log('Tab changed to:', newValue);
+    console.log('Business category:', selectedBusiness?.businessCategory);
+    console.log('Is tent business:', isTentBusiness(selectedBusiness));
+    
+    // If it's the Explore tab for tent business, navigate to explore page
+    if (isTentBusiness(selectedBusiness) && newValue === 2) {
+      navigate('/explore');
+      return;
+    }
+    
     setActiveTab(newValue);
     
-    // Fetch orders when Orders tab is selected
-    if (newValue === getOrdersTabIndex() && selectedBusiness) {
+    // Fetch orders and notifications when Orders tab is selected
+    // For catering: tab index 3, for non-catering: tab index 3
+    const isOrdersTab = selectedBusiness && !isTentBusiness(selectedBusiness) && (
+      (selectedBusiness.businessCategory === 'caters' && newValue === 3) ||
+      (selectedBusiness.businessCategory !== 'caters' && newValue === 3)
+    );
+    
+    console.log('Tab change:', {
+      newValue,
+      businessCategory: selectedBusiness?.businessCategory,
+      isOrdersTab,
+      isTent: isTentBusiness(selectedBusiness)
+    });
+    
+    if (isOrdersTab) {
+      console.log('✅ Fetching orders and notifications...');
+      // Fetch all data for Orders & Notifications tab
       fetchOrdersForBusiness();
-      fetchNotificationCount(); // Also fetch notification count
+      fetchNotificationCount();
+      fetchVendorNotifications();
     }
   };
 
@@ -394,14 +638,77 @@ const VendorDashboard: React.FC = () => {
     }
   };
 
+  // Scroll to the order after orders are updated
+  useEffect(() => {
+    if (orderToScrollTo && orders.length > 0 && !ordersLoading) {
+      // Immediately restore saved position to prevent jump to top
+      if (savedScrollPosition !== null) {
+        window.scrollTo({ top: savedScrollPosition - 100, behavior: 'auto' });
+      }
+      
+      // Then try to find and scroll to the element with multiple attempts
+      const scrollToOrder = () => {
+        const orderElement = document.getElementById(`order-${orderToScrollTo}`);
+        if (orderElement) {
+          // Calculate absolute position correctly
+          const rect = orderElement.getBoundingClientRect();
+          const absoluteElementTop = rect.top + window.pageYOffset;
+          
+          // Scroll to the element
+          window.scrollTo({ 
+            top: absoluteElementTop - 100,
+            behavior: 'auto'
+          });
+          
+          // Clear the scroll tracking
+          setOrderToScrollTo(null);
+          setSavedScrollPosition(null);
+        } else if (savedScrollPosition !== null) {
+          // If element not found, restore saved position
+          window.scrollTo({ top: savedScrollPosition - 100, behavior: 'auto' });
+          setOrderToScrollTo(null);
+          setSavedScrollPosition(null);
+        }
+      };
+      
+      // Try multiple times with increasing delays to ensure DOM is ready
+      setTimeout(() => scrollToOrder(), 0);
+      setTimeout(() => scrollToOrder(), 50);
+      setTimeout(() => scrollToOrder(), 100);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollToOrder();
+        });
+      });
+    }
+  }, [orders, ordersLoading, orderToScrollTo, savedScrollPosition]);
+
   const handleOrderStatusUpdate = async (orderId: string, newStatus: Order['status']) => {
     try {
+      // Get the order element's position BEFORE updating
+      const orderElement = document.getElementById(`order-${orderId}`);
+      let elementPosition: number | null = null;
+      
+      if (orderElement) {
+        const rect = orderElement.getBoundingClientRect();
+        elementPosition = rect.top + window.pageYOffset;
+      }
+      
+      // Save both scroll position and element position
+      const currentScrollPosition = window.scrollY;
+      setSavedScrollPosition(elementPosition !== null ? elementPosition : currentScrollPosition);
+      
+      // Store the order ID to scroll to after refresh
+      setOrderToScrollTo(orderId);
       await orderService.updateOrderStatus(orderId, newStatus);
       // Refresh orders after status update
       await fetchOrdersForBusiness();
+      // The useEffect will handle scrolling to the order after orders are loaded
     } catch (err: any) {
       console.error('Error updating order status:', err);
       setOrdersError(err.message || 'Failed to update order status');
+      setOrderToScrollTo(null); // Clear on error
+      setSavedScrollPosition(null);
     }
   };
 
@@ -430,6 +737,26 @@ const VendorDashboard: React.FC = () => {
           onBusinessSelect={handleBusinessSelect}
           onBusinessesChange={handleBusinessesChange}
         />
+      </Box>
+    );
+  }
+
+  // Show loading if auth is still loading or if we're waiting for user data
+  if (authLoading || (!user && loading)) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // If user is not available after loading, show error
+  if (!user) {
+    return (
+      <Box>
+        <Alert severity="error">
+          Unable to load user information. Please try logging in again.
+        </Alert>
       </Box>
     );
   }
@@ -541,7 +868,9 @@ const VendorDashboard: React.FC = () => {
                   transition: 'all 0.2s ease-in-out'
                 }
               }}
-              onClick={() => setActiveTab(4)} // Orders tab
+              onClick={() => {
+                navigate('/vendor-orders-notifications');
+              }}
             >
               <CardContent>
                 <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -581,24 +910,36 @@ const VendorDashboard: React.FC = () => {
       {selectedBusiness && (
         <>
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-            <Tabs value={activeTab} onChange={handleTabChange}>
+            <Tabs 
+              value={activeTab} 
+              onChange={handleTabChange}
+              aria-label="vendor dashboard tabs"
+            >
               <Tab label="Overview" />
-              {selectedBusiness.businessCategory !== 'caters' && <Tab label="Themes" />}
-              {selectedBusiness.businessCategory !== 'caters' && <Tab label="Inventory" />}
-              {selectedBusiness.businessCategory === 'caters' && <Tab label="Plates" />}
-              <Tab 
-                label={
-                  unreadNotificationCount > 0 
-                    ? `Orders (${unreadNotificationCount})` 
-                    : "Orders"
-                } 
-              />
+              {isTentBusiness(selectedBusiness) && <Tab label="Theme" />}
+              {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory !== 'caters' && <Tab label="Themes" />}
+              {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory !== 'caters' && <Tab label="Inventory" />}
+              {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && <Tab label="Plate" />}
+              {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && <Tab label="Dish" />}
+              {!isTentBusiness(selectedBusiness) && (
+                <Tab 
+                  label={
+                    unreadNotificationCount > 0 
+                      ? `Orders & Notifications (${unreadNotificationCount})` 
+                      : "Orders & Notifications"
+                  }
+                  data-tab-index={getOrdersTabIndex()}
+                />
+              )}
+              {isTentBusiness(selectedBusiness) && (
+                <Tab label="Explore" />
+              )}
             </Tabs>
           </Box>
 
-      {/* Tab Content */}
-      {activeTab === 0 && (
-        <Box>
+          {/* Tab Content */}
+          {activeTab === 0 && (
+            <Box>
           {/* Business Information Card */}
           <Grid container spacing={3} sx={{ mt: 2 }}>
         <Grid item xs={12} md={8}>
@@ -609,12 +950,21 @@ const VendorDashboard: React.FC = () => {
                 <Typography variant="h5" component="h2">
                   {selectedBusiness.businessName}
                 </Typography>
-                <Box ml="auto">
+                <Box ml="auto" display="flex" alignItems="center" gap={1}>
                   <Chip 
                     label={selectedBusiness.isActive ? 'Active' : 'Inactive'} 
                     color={selectedBusiness.isActive ? 'success' : 'default'}
                     size="small"
                   />
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<EditIcon />}
+                    onClick={() => setBusinessFormOpen(true)}
+                    sx={{ ml: 1 }}
+                  >
+                    Edit
+                  </Button>
                 </Box>
               </Box>
               
@@ -714,29 +1064,47 @@ const VendorDashboard: React.FC = () => {
                 Business Statistics
               </Typography>
               
-              <Box display="flex" alignItems="center" mb={2}>
-                <PaletteIcon sx={{ fontSize: 24, color: 'primary.main', mr: 1 }} />
-                <Box>
-                  <Typography variant="h4" component="div">
-                    {themes.length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Total Themes
-                  </Typography>
-                </Box>
-              </Box>
+              {selectedBusiness.businessCategory === 'caters' ? (
+                <>
+                  <Box display="flex" alignItems="center" mb={2}>
+                    <PaletteIcon sx={{ fontSize: 24, color: 'primary.main', mr: 1 }} />
+                    <Box>
+                      <Typography variant="h4" component="div">
+                        {plates.length}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Plates
+                      </Typography>
+                    </Box>
+                  </Box>
+                </>
+              ) : (
+                <>
+                  <Box display="flex" alignItems="center" mb={2}>
+                    <PaletteIcon sx={{ fontSize: 24, color: 'primary.main', mr: 1 }} />
+                    <Box>
+                      <Typography variant="h4" component="div">
+                        {themes.length}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Themes
+                      </Typography>
+                    </Box>
+                  </Box>
 
-              <Box display="flex" alignItems="center" mb={2}>
-                <BusinessIcon sx={{ fontSize: 24, color: 'success.main', mr: 1 }} />
-                <Box>
-                  <Typography variant="h4" component="div">
-                    {themes.filter(theme => theme.isActive).length}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Active Themes
-                  </Typography>
-                </Box>
-              </Box>
+                  <Box display="flex" alignItems="center" mb={2}>
+                    <BusinessIcon sx={{ fontSize: 24, color: 'success.main', mr: 1 }} />
+                    <Box>
+                      <Typography variant="h4" component="div">
+                        {themes.filter(theme => theme.isActive).length}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Active Themes
+                      </Typography>
+                    </Box>
+                  </Box>
+                </>
+              )}
 
               <Box display="flex" alignItems="center">
                 <ScheduleIcon sx={{ fontSize: 24, color: 'info.main', mr: 1 }} />
@@ -754,8 +1122,8 @@ const VendorDashboard: React.FC = () => {
         </Grid>
       </Grid>
 
-          {/* Themes Section - Only show for non-catering businesses */}
-          {selectedBusiness.businessCategory !== 'caters' && (
+          {/* Themes Section - Only show for non-catering businesses (including tent) */}
+          {(isTentBusiness(selectedBusiness) || selectedBusiness.businessCategory !== 'caters') && (
             <Box sx={{ mt: 4 }}>
               <Typography variant="h5" gutterBottom>
                 My Themes ({themes.length})
@@ -807,12 +1175,23 @@ const VendorDashboard: React.FC = () => {
             </Box>
           )}
 
-          {/* Plates Section - Only show for catering businesses */}
-          {selectedBusiness.businessCategory === 'caters' && (
+          {/* Plates Section - Only show for catering businesses (not tent) */}
+          {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && (
             <Box sx={{ mt: 4 }}>
-              <Typography variant="h5" gutterBottom>
-                My Plates ({plates.length})
-              </Typography>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h5" gutterBottom>
+                  My Plates ({plates.length})
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    setEditingPlate(null);
+                    setPlateFormOpen(true);
+                  }}
+                >
+                  Add Plate
+                </Button>
+              </Box>
               
               {plates.length === 0 ? (
                 <Paper sx={{ p: 3, textAlign: 'center' }}>
@@ -840,10 +1219,56 @@ const VendorDashboard: React.FC = () => {
               )}
             </Box>
           )}
-        </Box>
-      )}
 
-          {activeTab === 1 && selectedBusiness && selectedBusiness.businessCategory !== 'caters' && (
+          {/* Dishes Section - Only show for catering businesses (not tent) */}
+          {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && (
+            <Box sx={{ mt: 4 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h5" gutterBottom>
+                  My Dishes ({dishes.length})
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={handleAddDish}
+                >
+                  Add Dish
+                </Button>
+              </Box>
+              
+              {dishes.length === 0 ? (
+                <Paper sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No dishes created yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Start by creating your first dish to showcase your catering menu.
+                  </Typography>
+                </Paper>
+              ) : (
+                <Grid container spacing={2}>
+                  {dishes.map((dish) => (
+                    <Grid item xs={12} sm={6} md={4} key={dish.dishId}>
+                      <DishCard
+                        dish={dish}
+                        business={selectedBusiness}
+                        onEdit={handleEditDish}
+                        onDelete={handleDishDelete}
+                        onUpdate={handleDishUpdate}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          )}
+            </Box>
+          )}
+
+          {/* Theme Tab - Show for tent businesses and non-catering businesses only */}
+          {activeTab === 1 && selectedBusiness && 
+            !isTentBusiness(selectedBusiness) && 
+            selectedBusiness.businessCategory !== 'caters' && 
+            getOrdersTabIndex() !== 1 && (
             <ThemeManagement
               themes={themes}
               businessId={selectedBusiness.businessId}
@@ -851,7 +1276,37 @@ const VendorDashboard: React.FC = () => {
             />
           )}
 
-          {activeTab === 2 && selectedBusiness && selectedBusiness.businessCategory !== 'caters' && (
+          {/* Theme Tab - Show for tent businesses */}
+          {activeTab === 1 && selectedBusiness && 
+            isTentBusiness(selectedBusiness) && (
+            <ThemeManagement
+              themes={themes}
+              businessId={selectedBusiness.businessId}
+              onThemesChange={handleThemesChange}
+            />
+          )}
+
+          {/* Explore Tab - Only for tent businesses */}
+          {activeTab === 2 && isTentBusiness(selectedBusiness) && (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Explore Marketplace
+              </Typography>
+              <Typography variant="body1" color="text.secondary" paragraph>
+                Browse themes, inventory, and plates from other vendors
+              </Typography>
+              <Button
+                variant="contained"
+                size="large"
+                onClick={() => navigate('/explore')}
+                sx={{ mt: 2 }}
+              >
+                Go to Explore Page
+              </Button>
+            </Box>
+          )}
+
+          {activeTab === 2 && selectedBusiness && !isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory !== 'caters' && (
             <Box>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                 <Typography variant="h5" component="h2">
@@ -900,8 +1355,8 @@ const VendorDashboard: React.FC = () => {
             </Box>
           )}
 
-          {/* Plates Tab - Only show for catering businesses */}
-          {activeTab === 1 && selectedBusiness.businessCategory === 'caters' && (
+          {/* Plates Tab - Only show for catering businesses (not tent) */}
+          {activeTab === 1 && !isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && (
             <Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h5" gutterBottom>
@@ -948,60 +1403,214 @@ const VendorDashboard: React.FC = () => {
             </Box>
           )}
 
-          {/* Orders Tab */}
-          {activeTab === getOrdersTabIndex() && selectedBusiness && (
+          {/* Dishes Tab - Only show for catering businesses (not tent) */}
+          {activeTab === 2 && !isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && (
             <Box>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                <Typography variant="h5" component="h2">
-                  Orders for {selectedBusiness.businessName}
-                  {unreadNotificationCount > 0 && (
-                    <Chip 
-                      label={`${unreadNotificationCount} New`} 
-                      color="primary" 
-                      size="small" 
-                      sx={{ ml: 2 }}
-                    />
-                  )}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" gutterBottom>
+                  Dish Management
                 </Typography>
-                <Button 
-                  variant="outlined" 
-                  onClick={fetchOrdersForBusiness}
-                  disabled={ordersLoading}
+                <Button
+                  variant="contained"
+                  onClick={handleAddDish}
                 >
-                  Refresh Orders
+                  Add New Dish
                 </Button>
               </Box>
 
-              {/* Notification Banner */}
-              {unreadNotificationCount > 0 && (
-                <Alert 
-                  severity="info" 
-                  sx={{ mb: 2 }}
-                  action={
-                    <Button 
-                      color="inherit" 
-                      size="small" 
-                      onClick={() => {
-                        // Mark all notifications as read
-                        if (user?.phoneNumber) {
-                          notificationService.markAllAsRead(user.phoneNumber);
-                          fetchNotificationCount();
-                        }
-                      }}
-                    >
-                      Mark All Read
-                    </Button>
-                  }
-                >
-                  You have {unreadNotificationCount} unread order notification{unreadNotificationCount > 1 ? 's' : ''}!
-                </Alert>
+              {dishes.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No dishes yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Start by adding your first dish to showcase your catering menu.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    onClick={handleAddDish}
+                  >
+                    Add First Dish
+                  </Button>
+                </Paper>
+              ) : (
+                <Grid container spacing={3}>
+                  {dishes.map((dish) => (
+                    <Grid item xs={12} sm={6} md={4} key={dish.dishId}>
+                      <DishCard
+                        dish={dish}
+                        business={selectedBusiness}
+                        onEdit={handleEditDish}
+                        onDelete={handleDishDelete}
+                        onUpdate={handleDishUpdate}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
               )}
+            </Box>
+          )}
 
-              {ordersError && (
-                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError(null)}>
-                  {ordersError}
-                </Alert>
-              )}
+          {/* Orders & Notifications Tab - Rebuilt from scratch */}
+          {/* For non-catering: tab index 3 (Overview=0, Themes=1, Inventory=2, Orders=3) */}
+          {/* For catering: tab index 3 (Overview=0, Plate=1, Dish=2, Orders=3) */}
+          {selectedBusiness && !isTentBusiness(selectedBusiness) && (
+            (selectedBusiness.businessCategory === 'caters' && activeTab === 3) ||
+            (selectedBusiness.businessCategory !== 'caters' && activeTab === 3)
+          ) && (
+            <Box sx={{ width: '100%', p: 2 }}>
+              <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
+                Orders & Notifications
+              </Typography>
+              
+              {/* Notifications Section - Show First */}
+              <Box sx={{ mb: 4 }}>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h5" component="h2">
+                    Notifications
+                    {unreadNotificationCount > 0 && (
+                      <Chip 
+                        label={`${unreadNotificationCount} Unread`} 
+                        color="error" 
+                        size="small" 
+                        sx={{ ml: 2 }}
+                      />
+                    )}
+                  </Typography>
+                  <Box display="flex" gap={1}>
+                    <Button 
+                      variant="outlined" 
+                      size="small"
+                      onClick={fetchVendorNotifications}
+                      disabled={loadingNotifications}
+                    >
+                      Refresh
+                    </Button>
+                    {unreadNotificationCount > 0 && (
+                      <Button 
+                        variant="contained" 
+                        size="small"
+                        color="primary"
+                        onClick={async () => {
+                          if (user?.phoneNumber) {
+                            try {
+                              await notificationService.markAllAsRead(user.phoneNumber);
+                              fetchNotificationCount();
+                              fetchVendorNotifications();
+                            } catch (err) {
+                              console.error('Error marking all notifications as read:', err);
+                            }
+                          }
+                        }}
+                      >
+                        Mark All Read
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
+                
+                {loadingNotifications ? (
+                  <Box display="flex" justifyContent="center" alignItems="center" minHeight="100px">
+                    <CircularProgress />
+                  </Box>
+                ) : vendorNotifications.length === 0 ? (
+                  <Paper sx={{ p: 3, textAlign: 'center' }}>
+                    <NotificationIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                    <Typography variant="body1" color="text.secondary">
+                      No notifications yet
+                    </Typography>
+                  </Paper>
+                ) : (
+                  <Box>
+                    {vendorNotifications.map((notification) => (
+                      <Card 
+                        key={notification.notificationId} 
+                        sx={{ 
+                          mb: 2,
+                          borderLeft: !notification.isRead ? '4px solid #1976d2' : 'none',
+                          bgcolor: !notification.isRead ? 'action.hover' : 'inherit',
+                          cursor: 'pointer',
+                          '&:hover': {
+                            boxShadow: 2,
+                          }
+                        }}
+                        onClick={() => {
+                          if (!notification.isRead) {
+                            handleMarkNotificationAsRead(notification.notificationId);
+                          }
+                        }}
+                      >
+                        <CardContent>
+                          <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+                            <Box flex={1}>
+                              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                                <NotificationIcon 
+                                  sx={{ 
+                                    fontSize: 20, 
+                                    color: notification.isRead ? 'text.secondary' : 'primary.main' 
+                                  }} 
+                                />
+                                <Typography 
+                                  variant="body1" 
+                                  sx={{ fontWeight: notification.isRead ? 'normal' : 'bold' }}
+                                >
+                                  {notification.message}
+                                </Typography>
+                                {!notification.isRead && (
+                                  <Chip label="New" color="primary" size="small" />
+                                )}
+                              </Box>
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {new Date(notification.createdAt).toLocaleString()}
+                              </Typography>
+                              {notification.orderId && (
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {notification.businessName}
+                                </Typography>
+                              )}
+                            </Box>
+                            {!notification.isRead && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMarkNotificationAsRead(notification.notificationId);
+                                }}
+                              >
+                                Mark Read
+                              </Button>
+                            )}
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* Orders Section */}
+              <Box>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                  <Typography variant="h5" component="h2">
+                    Orders for {selectedBusiness.businessName}
+                  </Typography>
+                  <Button 
+                    variant="outlined" 
+                    onClick={fetchOrdersForBusiness}
+                    disabled={ordersLoading}
+                  >
+                    Refresh Orders
+                  </Button>
+                </Box>
+
+                {ordersError && (
+                  <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError(null)}>
+                    {ordersError}
+                  </Alert>
+                )}
 
               {ordersLoading ? (
                 <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
@@ -1019,14 +1628,14 @@ const VendorDashboard: React.FC = () => {
               ) : (
                 <Grid container spacing={3}>
                   {orders.map((order) => (
-                    <Grid item xs={12} key={order.orderId}>
+                    <Grid item xs={12} key={order.orderId} id={`order-${order.orderId}`}>
                       <Card>
                         <CardContent>
                           <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
                             <Box>
                               <Box display="flex" alignItems="center" gap={1} mb={1}>
                                 <Typography variant="h6">
-                                  Order #{order.orderId}
+                                  {getOrderDisplayTitle(order)}
                                 </Typography>
                                 {/* Show NEW indicator for recent orders (within last 24 hours) */}
                                 {new Date(order.orderDate).getTime() > Date.now() - 24 * 60 * 60 * 1000 && (
@@ -1165,6 +1774,7 @@ const VendorDashboard: React.FC = () => {
                   ))}
                 </Grid>
               )}
+              </Box>
             </Box>
           )}
 
@@ -1211,6 +1821,20 @@ const VendorDashboard: React.FC = () => {
           plate={editingPlate}
           businessId={selectedBusiness.businessId}
           onSuccess={handlePlateSuccess}
+        />
+      )}
+
+      {/* Dish Management Form */}
+      {selectedBusiness && (
+        <DishManagementForm
+          open={dishFormOpen}
+          onClose={() => {
+            setDishFormOpen(false);
+            setEditingDish(null);
+          }}
+          dish={editingDish}
+          businessId={selectedBusiness.businessId}
+          onSuccess={handleDishSuccess}
         />
       )}
     </Box>

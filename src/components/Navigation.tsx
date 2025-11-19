@@ -17,6 +17,10 @@ import {
   Avatar,
   Divider,
   Badge,
+  Paper,
+  ListItemAvatar,
+  CircularProgress,
+  Typography as MuiTypography,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -33,12 +37,18 @@ import {
   Chat as ChatIcon,
   Notifications as NotificationIcon,
   Star as StarIcon,
+  CalendarToday as CalendarIcon,
+  Restaurant as RestaurantIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { useNotifications } from '../contexts/NotificationContext';
+import { useVendorNotifications } from '../contexts/VendorNotificationContext';
 import Cart from './Cart';
 import notificationService from '../services/notificationService';
 import chatService from '../services/chatService';
+import BusinessService from '../services/businessService';
+import { Notification } from '../types/notification';
 
 // Responsive drawer width - scales with viewport
 // Note: drawerWidth constant removed as we now use clamp() directly in sx props
@@ -48,10 +58,25 @@ const Navigation: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { getCartItemCount, isCartOpen, openCart, closeCart } = useCart();
+  const { 
+    notifications: clientNotifications, 
+    unreadCount: clientNotificationCount, 
+    loading: loadingNotifications,
+    markAsRead 
+  } = useNotifications();
+  const {
+    notifications: vendorNotifications,
+    unreadCount: vendorNotificationCount,
+    loading: loadingVendorNotifications,
+    markAsRead: markVendorNotificationAsRead,
+    refreshNotifications: refreshVendorNotifications,
+  } = useVendorNotifications();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const [notificationCount, setNotificationCount] = React.useState(0);
+  const [notificationMenuAnchor, setNotificationMenuAnchor] = React.useState<null | HTMLElement>(null);
+  const [vendorNotificationMenuAnchor, setVendorNotificationMenuAnchor] = React.useState<null | HTMLElement>(null);
   const [unreadChatCount, setUnreadChatCount] = React.useState(0);
+  const [isCateringBusiness, setIsCateringBusiness] = React.useState(false);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -65,30 +90,101 @@ const Navigation: React.FC = () => {
     setAnchorEl(null);
   };
 
+  const handleNotificationMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setNotificationMenuAnchor(event.currentTarget);
+  };
+
+  const handleNotificationMenuClose = () => {
+    setNotificationMenuAnchor(null);
+  };
+
+  const handleVendorNotificationMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setVendorNotificationMenuAnchor(event.currentTarget);
+    // Refresh vendor notifications when menu opens
+    if (user && user.userType === 'VENDOR') {
+      refreshVendorNotifications();
+    }
+  };
+
+  const handleVendorNotificationMenuClose = () => {
+    setVendorNotificationMenuAnchor(null);
+  };
+
+  const handleVendorNotificationClick = async (notification: Notification) => {
+    try {
+      await markVendorNotificationAsRead(notification.notificationId);
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+    
+    // Close the dropdown
+    handleVendorNotificationMenuClose();
+    
+    // Navigate to notifications tab (index 0) with the notification ID to highlight it
+    navigate('/vendor-orders-notifications', { 
+      state: { 
+        activeTab: 0, // Notifications tab
+        notificationId: notification.notificationId,
+        orderId: notification.orderId 
+      } 
+    });
+  };
+
+  const handleNotificationClick = async (notification: Notification) => {
+    // Always mark as read when notification is clicked/opened
+    // The backend will handle if it's already read
+    try {
+      await markAsRead(notification.notificationId);
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      // Continue navigation even if marking as read fails
+    }
+    
+    // Close the dropdown
+    handleNotificationMenuClose();
+    
+    // If notification has an orderId, navigate to My Orders tab to show all orders
+    // Otherwise, navigate to Notifications tab
+    if (notification.orderId) {
+      navigate('/client-dashboard', { 
+        state: { 
+          activeTab: 1, // My Orders tab - show all orders
+          orderId: notification.orderId, // Keep orderId for reference but don't auto-open dialog
+          notificationId: notification.notificationId
+        } 
+      });
+    } else {
+      navigate('/client-dashboard', { 
+        state: { 
+          activeTab: 2, // Notifications tab
+          notificationId: notification.notificationId
+        } 
+      });
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return date.toLocaleDateString();
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/login');
     handleUserMenuClose();
   };
 
-  // Fetch notification count for vendors
-  React.useEffect(() => {
-    if (user && user.userType === 'VENDOR') {
-      const fetchNotificationCount = async () => {
-        try {
-          const count = await notificationService.getNotificationCount(user.phoneNumber);
-          setNotificationCount(count);
-        } catch (error) {
-          console.error('Error fetching notification count:', error);
-        }
-      };
-      
-      fetchNotificationCount();
-      // Refresh every 30 seconds
-      const interval = setInterval(fetchNotificationCount, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [user]);
+  // VendorNotificationContext handles all vendor notification fetching and syncing
+  // No need for separate useEffect hooks here
+
+  // NotificationContext handles all notification fetching and syncing
+  // No need for separate useEffect hooks here
 
   // Fetch unread chat messages for both clients and vendors
   React.useEffect(() => {
@@ -109,6 +205,27 @@ const Navigation: React.FC = () => {
     }
   }, [user]);
 
+  // Fetch vendor's business to determine if it's a catering business
+  React.useEffect(() => {
+    if (user && user.userType === 'VENDOR' && user.phoneNumber) {
+      const fetchVendorBusiness = async () => {
+        try {
+          const businesses = await BusinessService.getBusinessesByVendorPhoneNumber(user.phoneNumber);
+          // Check if any business is catering type
+          const hasCateringBusiness = businesses.some(b => b.businessCategory === 'caters');
+          setIsCateringBusiness(hasCateringBusiness);
+        } catch (error) {
+          console.error('Error fetching vendor business:', error);
+          setIsCateringBusiness(false);
+        }
+      };
+      
+      fetchVendorBusiness();
+    } else {
+      setIsCateringBusiness(false);
+    }
+  }, [user]);
+
   const baseItems = [
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
@@ -124,15 +241,19 @@ const Navigation: React.FC = () => {
     { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
   ];
 
-  const vendorItems = [
-    { text: 'My Business', icon: <BusinessIcon />, path: '/vendor-dashboard' },
-    { 
-      text: unreadChatCount > 0 ? `Chat (${unreadChatCount})` : 'Chat', 
-      icon: <ChatIcon />, 
-      path: '/vendor-chat' 
-    },
-    { text: 'Explore', icon: <PaletteIcon />, path: '/explore' },
-  ];
+  // Vendor menu items - dynamically change Theme to Plate for catering businesses
+  const getVendorItems = () => {
+    const baseVendorItems = [
+      { text: 'Dashboard', icon: <DashboardIcon />, path: '/vendor-dashboard' },
+      { text: 'Business', icon: <BusinessIcon />, path: '/vendor-dashboard' },
+      { text: isCateringBusiness ? 'Plate' : 'Theme', icon: <PaletteIcon />, path: isCateringBusiness ? '/plates' : '/themes' },
+      ...(isCateringBusiness ? [{ text: 'Dish', icon: <RestaurantIcon />, path: '/vendor-dashboard', activeTab: 2 }] : []),
+      { text: 'Availability', icon: <CalendarIcon />, path: '/availability' },
+    ];
+    return baseVendorItems;
+  };
+
+  const vendorItems = getVendorItems();
 
   const adminItems = [
     { text: 'Users', icon: <PeopleIcon />, path: '/users' },
@@ -142,13 +263,34 @@ const Navigation: React.FC = () => {
     { text: 'Images', icon: <ImageIcon />, path: '/images' },
   ];
 
-  const menuItems = user && (user.role === 'ADMIN' || user.role === 'VENDOR_ADMIN')
-    ? [{ text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' }, ...baseItems, ...adminItems]
-    : user && user.userType === 'CLIENT'
-    ? clientItems
-    : user && user.userType === 'VENDOR'
-    ? vendorItems
-    : baseItems;
+  // Determine menu items based on user role and type
+  // Priority: SUPER_ADMIN > VENDOR (by userType) > CLIENT > ADMIN/VENDOR_ADMIN > default
+  // IMPORTANT: Check userType BEFORE role to ensure vendors always get vendor menu
+  let menuItems = baseItems;
+  
+  if (user) {
+    if (user.role === 'SUPER_ADMIN') {
+      // Super admin sees everything
+      menuItems = [
+        { text: 'Super Admin Dashboard', icon: <DashboardIcon />, path: '/super-admin-dashboard' },
+        ...baseItems,
+        ...adminItems
+      ];
+    } else if (user.userType === 'VENDOR') {
+      // Vendors ONLY see vendor-specific items (check userType FIRST before role)
+      menuItems = vendorItems;
+    } else if (user.userType === 'CLIENT') {
+      // Clients see client-specific items
+      menuItems = clientItems;
+    } else if (user.role === 'ADMIN' || user.role === 'VENDOR_ADMIN') {
+      // Admin sees admin dashboard and admin items (only if not VENDOR userType)
+      menuItems = [
+        { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+        ...baseItems,
+        ...adminItems
+      ];
+    }
+  }
 
   const drawer = (
     <div>
@@ -158,26 +300,43 @@ const Navigation: React.FC = () => {
         </Typography>
       </Toolbar>
       <List>
-        {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              component={Link}
-              to={item.path}
-              selected={location.pathname === item.path}
-            >
-              <ListItemIcon>
-                {item.path.includes('chat') && unreadChatCount > 0 ? (
-                  <Badge badgeContent={unreadChatCount} color="error">
-                    {item.icon}
-                  </Badge>
-                ) : (
-                  item.icon
-                )}
-              </ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
+        {menuItems.map((item) => {
+          const hasActiveTab = (item as any).activeTab !== undefined;
+          const isSelected = hasActiveTab 
+            ? location.pathname === item.path && (location.state as any)?.activeTab === (item as any).activeTab
+            : location.pathname === item.path;
+          return (
+            <ListItem key={item.text} disablePadding>
+              <ListItemButton
+                component={hasActiveTab ? 'div' : Link}
+                to={hasActiveTab ? undefined : item.path}
+                onClick={hasActiveTab ? () => {
+                  setMobileOpen(false); // Close mobile drawer
+                  // Force navigation with state - add timestamp to ensure state change is detected
+                  navigate(item.path, { 
+                    state: { 
+                      activeTab: (item as any).activeTab,
+                      _timestamp: Date.now() // Force state update
+                    },
+                    replace: location.pathname === item.path // Replace if already on same path
+                  });
+                } : undefined}
+                selected={isSelected}
+              >
+                <ListItemIcon>
+                  {item.path.includes('chat') && unreadChatCount > 0 ? (
+                    <Badge badgeContent={unreadChatCount} color="error">
+                      {item.icon}
+                    </Badge>
+                  ) : (
+                    item.icon
+                  )}
+                </ListItemIcon>
+                <ListItemText primary={item.text} />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
       </List>
     </div>
   );
@@ -214,6 +373,120 @@ const Navigation: React.FC = () => {
           </Typography>
           {user && (
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {/* Notification Icon for Clients */}
+              {user.userType === 'CLIENT' && (
+                <>
+                  <IconButton
+                    color="inherit"
+                    onClick={handleNotificationMenuOpen}
+                    sx={{ mr: 1 }}
+                  >
+                    <Badge badgeContent={clientNotificationCount > 0 ? clientNotificationCount : undefined} color="error">
+                      <NotificationIcon />
+                    </Badge>
+                  </IconButton>
+                  <Menu
+                    anchorEl={notificationMenuAnchor}
+                    open={Boolean(notificationMenuAnchor)}
+                    onClose={handleNotificationMenuClose}
+                    PaperProps={{
+                      sx: {
+                        width: 400,
+                        maxHeight: 500,
+                        mt: 1.5,
+                      },
+                    }}
+                    anchorOrigin={{
+                      vertical: 'bottom',
+                      horizontal: 'right',
+                    }}
+                    transformOrigin={{
+                      vertical: 'top',
+                      horizontal: 'right',
+                    }}
+                  >
+                    <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                      <MuiTypography variant="h6" component="div">
+                        Notifications
+                      </MuiTypography>
+                    </Box>
+                    {loadingNotifications ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : clientNotifications.length === 0 ? (
+                      <Box sx={{ p: 3, textAlign: 'center' }}>
+                        <MuiTypography variant="body2" color="text.secondary">
+                          No notifications
+                        </MuiTypography>
+                      </Box>
+                    ) : (
+                      <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                        {clientNotifications.map((notification) => (
+                          <MenuItem
+                            key={notification.notificationId}
+                            onClick={() => handleNotificationClick(notification)}
+                            sx={{
+                              borderLeft: !notification.isRead ? '4px solid #1976d2' : '4px solid transparent',
+                              bgcolor: !notification.isRead ? 'action.hover' : 'inherit',
+                              '&:hover': {
+                                bgcolor: 'action.selected',
+                              },
+                            }}
+                          >
+                            <ListItemAvatar>
+                              <Avatar sx={{ bgcolor: notification.isRead ? 'grey.300' : 'primary.main' }}>
+                                <NotificationIcon />
+                              </Avatar>
+                            </ListItemAvatar>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <MuiTypography variant="body2" noWrap sx={{ fontWeight: notification.isRead ? 'normal' : 'bold' }}>
+                                {notification.message}
+                              </MuiTypography>
+                              <MuiTypography variant="caption" color="text.secondary" display="block">
+                                {formatDate(notification.createdAt)}
+                              </MuiTypography>
+                              <MuiTypography variant="caption" color="text.secondary" display="block">
+                                {notification.businessName}
+                              </MuiTypography>
+                              {notification.notificationType === 'STOCK_AVAILABLE' && notification.deliveryDate && (
+                                <MuiTypography variant="caption" color="primary" display="block" sx={{ fontWeight: 'bold' }}>
+                                  Available Date: {new Date(notification.deliveryDate).toLocaleDateString()}
+                                </MuiTypography>
+                              )}
+                            </Box>
+                            {!notification.isRead && (
+                              <Box
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  bgcolor: 'primary.main',
+                                  ml: 1,
+                                }}
+                              />
+                            )}
+                          </MenuItem>
+                        ))}
+                      </Box>
+                    )}
+                    {clientNotifications.length > 0 && (
+                      <Box sx={{ p: 1, borderTop: 1, borderColor: 'divider', textAlign: 'center' }}>
+                        <MenuItem
+                          onClick={() => {
+                            handleNotificationMenuClose();
+                            navigate('/client-dashboard');
+                          }}
+                          sx={{ justifyContent: 'center' }}
+                        >
+                          View All Notifications
+                        </MenuItem>
+                      </Box>
+                    )}
+                  </Menu>
+                </>
+              )}
+              
               {/* Cart Icon for Clients */}
               {user.userType === 'CLIENT' && (
                 <IconButton
@@ -221,61 +494,121 @@ const Navigation: React.FC = () => {
                   onClick={openCart}
                   sx={{ mr: 1 }}
                 >
-                  <CartIcon />
-                  {getCartItemCount() > 0 && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        backgroundColor: 'error.main',
-                        color: 'white',
-                        borderRadius: '50%',
-                        width: 20,
-                        height: 20,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      {getCartItemCount()}
-                    </Box>
-                  )}
+                  <Badge badgeContent={getCartItemCount() > 0 ? getCartItemCount() : 0} color="error">
+                    <CartIcon />
+                  </Badge>
                 </IconButton>
               )}
               
               {/* Notification Icon for Vendors */}
               {user.userType === 'VENDOR' && (
-                <IconButton
-                  color="inherit"
-                  onClick={() => navigate('/vendor-dashboard')}
-                  sx={{ mr: 1 }}
-                >
-                  <NotificationIcon />
-                  {notificationCount > 0 && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        backgroundColor: 'error.main',
-                        color: 'white',
-                        borderRadius: '50%',
-                        width: 20,
-                        height: 20,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.75rem',
-                        fontWeight: 'bold',
-                      }}
-                    >
-                      {notificationCount}
+                <>
+                  <IconButton
+                    color="inherit"
+                    onClick={handleVendorNotificationMenuOpen}
+                    sx={{ mr: 1 }}
+                  >
+                    <Badge badgeContent={vendorNotificationCount > 0 ? vendorNotificationCount : undefined} color="error">
+                      <NotificationIcon />
+                    </Badge>
+                  </IconButton>
+                  <Menu
+                    anchorEl={vendorNotificationMenuAnchor}
+                    open={Boolean(vendorNotificationMenuAnchor)}
+                    onClose={handleVendorNotificationMenuClose}
+                    PaperProps={{
+                      sx: {
+                        width: 400,
+                        maxHeight: 500,
+                        mt: 1.5,
+                      },
+                    }}
+                    anchorOrigin={{
+                      vertical: 'bottom',
+                      horizontal: 'right',
+                    }}
+                    transformOrigin={{
+                      vertical: 'top',
+                      horizontal: 'right',
+                    }}
+                  >
+                    <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                      <MuiTypography variant="h6" component="div">
+                        Notifications
+                      </MuiTypography>
                     </Box>
-                  )}
-                </IconButton>
+                    {loadingVendorNotifications ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : vendorNotifications.length === 0 ? (
+                      <Box sx={{ p: 3, textAlign: 'center' }}>
+                        <MuiTypography variant="body2" color="text.secondary">
+                          No notifications
+                        </MuiTypography>
+                      </Box>
+                    ) : (
+                      <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                        {vendorNotifications.slice(0, 10).map((notification) => (
+                          <MenuItem
+                            key={notification.notificationId}
+                            onClick={() => handleVendorNotificationClick(notification)}
+                            sx={{
+                              borderLeft: !notification.isRead ? '4px solid #1976d2' : '4px solid transparent',
+                              bgcolor: !notification.isRead ? 'action.hover' : 'inherit',
+                              '&:hover': {
+                                bgcolor: 'action.selected',
+                              },
+                            }}
+                          >
+                            <ListItemAvatar>
+                              <Avatar sx={{ bgcolor: notification.isRead ? 'grey.300' : 'primary.main' }}>
+                                <NotificationIcon />
+                              </Avatar>
+                            </ListItemAvatar>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <MuiTypography variant="body2" noWrap sx={{ fontWeight: notification.isRead ? 'normal' : 'bold' }}>
+                                {notification.message}
+                              </MuiTypography>
+                              <MuiTypography variant="caption" color="text.secondary" display="block">
+                                {formatDate(notification.createdAt)}
+                              </MuiTypography>
+                              {notification.orderId && (
+                                <MuiTypography variant="caption" color="text.secondary" display="block">
+                                  {notification.businessName}
+                                </MuiTypography>
+                              )}
+                            </Box>
+                            {!notification.isRead && (
+                              <Box
+                                sx={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  bgcolor: 'primary.main',
+                                  ml: 1,
+                                }}
+                              />
+                            )}
+                          </MenuItem>
+                        ))}
+                      </Box>
+                    )}
+                    {vendorNotifications.length > 0 && (
+                      <Box sx={{ p: 1, borderTop: 1, borderColor: 'divider', textAlign: 'center' }}>
+                        <MenuItem
+                          onClick={() => {
+                            handleVendorNotificationMenuClose();
+                            navigate('/vendor-dashboard');
+                          }}
+                          sx={{ justifyContent: 'center' }}
+                        >
+                          View All Notifications
+                        </MenuItem>
+                      </Box>
+                    )}
+                  </Menu>
+                </>
               )}
               
               {/* Chat Icon for Both Clients and Vendors */}
@@ -284,28 +617,9 @@ const Navigation: React.FC = () => {
                 onClick={() => navigate(user.userType === 'CLIENT' ? '/client-chat' : '/vendor-chat')}
                 sx={{ mr: 1 }}
               >
-                <ChatIcon />
-                {unreadChatCount > 0 && (
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      backgroundColor: 'error.main',
-                      color: 'white',
-                      borderRadius: '50%',
-                      width: 20,
-                      height: 20,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold',
-                    }}
-                  >
-                    {unreadChatCount}
-                  </Box>
-                )}
+                <Badge badgeContent={unreadChatCount > 0 ? unreadChatCount : 0} color="error">
+                  <ChatIcon />
+                </Badge>
               </IconButton>
               <Typography 
                 variant="body2" 

@@ -49,18 +49,25 @@ class PlateService {
 
   async getPlatesByBusinessId(businessId: string): Promise<Plate[]> {
     try {
+      console.log('🌐 PlateService: Fetching plates for business:', businessId);
       const response = await fetch(`${API_BASE_URL}/business/${businessId}`, {
         method: 'GET',
         headers: this.getAuthHeaders(),
       });
 
+      console.log('🌐 PlateService: Response status:', response.status, response.statusText);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ PlateService: HTTP error! status:', response.status, 'body:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log('✅ PlateService: Received', Array.isArray(data) ? data.length : 'non-array', 'plates');
+      return Array.isArray(data) ? data : [];
     } catch (error) {
-      console.error('Error fetching plates by business ID:', error);
+      console.error('❌ PlateService: Error fetching plates by business ID:', error);
       throw error;
     }
   }

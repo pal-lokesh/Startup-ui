@@ -14,12 +14,15 @@ import {
 } from '@mui/material';
 import { Rating, RatingRequest, RatingFormData } from '../types/rating';
 import { ratingService } from '../services/ratingService';
+import { useAuth } from '../contexts/AuthContext';
+import orderService from '../services/orderService';
+import { OrderStatus } from '../types';
 
 interface RatingComponentProps {
   open: boolean;
   onClose: () => void;
   itemId: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   itemName: string;
   businessId: string;
   orderId?: string;
@@ -38,12 +41,49 @@ const RatingComponent: React.FC<RatingComponentProps> = ({
   existingRating,
   onRatingSubmitted,
 }) => {
+  const { user } = useAuth();
   const [formData, setFormData] = useState<RatingFormData>({
     rating: existingRating?.rating || 0,
     comment: existingRating?.comment || '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasDeliveredOrder, setHasDeliveredOrder] = useState<boolean | null>(null);
+  const [checkingOrder, setCheckingOrder] = useState(true);
+
+  // Check if client has a delivered order for this item when dialog opens
+  React.useEffect(() => {
+    const checkDeliveredOrder = async () => {
+      if (open && user && user.userType === 'CLIENT' && user.phoneNumber && itemId && itemType) {
+        setCheckingOrder(true);
+        try {
+          const orders = await orderService.getOrdersByUserId(user.phoneNumber);
+          // Check if any DELIVERED order contains this item
+          const hasDelivered = orders.some(order => {
+            if (order.status === OrderStatus.DELIVERED && order.orderItems) {
+              return order.orderItems.some(item => 
+                item.itemId === itemId && 
+                item.itemType.toUpperCase() === itemType.toUpperCase()
+              );
+            }
+            return false;
+          });
+          setHasDeliveredOrder(hasDelivered);
+        } catch (err) {
+          console.error('Error checking delivered orders:', err);
+          setHasDeliveredOrder(false);
+        } finally {
+          setCheckingOrder(false);
+        }
+      } else {
+        // If not a client or existing rating, allow rating
+        setHasDeliveredOrder(user?.userType !== 'CLIENT' || !!existingRating);
+        setCheckingOrder(false);
+      }
+    };
+
+    checkDeliveredOrder();
+  }, [open, user, itemId, itemType, existingRating]);
 
   const handleRatingChange = (event: React.SyntheticEvent, newValue: number | null) => {
     setFormData(prev => ({
@@ -62,6 +102,12 @@ const RatingComponent: React.FC<RatingComponentProps> = ({
   const handleSubmit = async () => {
     if (formData.rating === 0) {
       setError('Please select a rating');
+      return;
+    }
+
+    // Check if client has delivered order (unless it's an existing rating being updated)
+    if (user?.userType === 'CLIENT' && !existingRating && hasDeliveredOrder === false) {
+      setError('You can only rate items after your order has been successfully delivered.');
       return;
     }
 
@@ -113,6 +159,16 @@ const RatingComponent: React.FC<RatingComponentProps> = ({
       </DialogTitle>
       
       <DialogContent>
+        {checkingOrder && user?.userType === 'CLIENT' && !existingRating && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Verifying order status...
+          </Alert>
+        )}
+        {!checkingOrder && user?.userType === 'CLIENT' && !existingRating && hasDeliveredOrder === false && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            You can only rate items after your order has been successfully delivered. Please wait for your order to be delivered before rating.
+          </Alert>
+        )}
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
@@ -158,7 +214,7 @@ const RatingComponent: React.FC<RatingComponentProps> = ({
         <Button
           onClick={handleSubmit}
           variant="contained"
-          disabled={loading || formData.rating === 0}
+          disabled={loading || formData.rating === 0 || checkingOrder || (user?.userType === 'CLIENT' && !existingRating && hasDeliveredOrder === false)}
           startIcon={loading ? <CircularProgress size={20} /> : null}
         >
           {loading ? 'Submitting...' : existingRating ? 'Update Rating' : 'Submit Rating'}

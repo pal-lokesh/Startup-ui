@@ -31,9 +31,8 @@ import RatingDisplay from './RatingDisplay';
 import RatingComponent from './RatingComponent';
 import { Rating } from '../types/rating';
 import { useAuth } from '../contexts/AuthContext';
-import stockNotificationService from '../services/stockNotificationService';
-import { Notifications as NotificationsIcon } from '@mui/icons-material';
 import { Alert, Snackbar } from '@mui/material';
+import DatePickerDialog from './DatePickerDialog';
 
 interface InventoryCardProps {
   inventory: Inventory;
@@ -70,9 +69,9 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
   const [priceUpdateLoading, setPriceUpdateLoading] = useState(false);
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
   const [existingRating, setExistingRating] = useState<Rating | undefined>(undefined);
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [subscribing, setSubscribing] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [pendingCartAction, setPendingCartAction] = useState<'add' | 'buyNow' | null>(null);
   const { addToCart, isInCart, removeFromCart, openCart } = useCart();
   const { user } = useAuth();
   
@@ -83,62 +82,41 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
       if (isInCart(inventory.inventoryId, 'inventory')) {
         removeFromCart(inventory.inventoryId, 'inventory');
       } else {
-        addToCart(inventory, business);
+        // Open date picker first
+        setPendingCartAction('add');
+        setDatePickerOpen(true);
       }
     }
   };
 
   const handleBuyNow = (event: React.MouseEvent) => {
     event.stopPropagation();
-    if (business && !isOutOfStock) {
-      // Check if item is already in cart
-      const itemInCart = isInCart(inventory.inventoryId, 'inventory');
-      
-      // If not in cart, add it
-      if (!itemInCart) {
-        addToCart(inventory, business);
-      }
-      
-      // Open cart drawer
-      openCart();
-      
-      // Call parent's onBuyNow if provided
-      if (onBuyNow) {
-        onBuyNow(inventory, business);
-      }
+    if (business) {
+      // Always open date picker first - let client choose date
+      setPendingCartAction('buyNow');
+      setDatePickerOpen(true);
     }
   };
 
-  // Check subscription status on mount
-  useEffect(() => {
-    if (user && isOutOfStock) {
-      stockNotificationService.isSubscribed(user.phoneNumber, inventory.inventoryId, 'INVENTORY')
-        .then(setIsSubscribed)
-        .catch(() => setIsSubscribed(false));
+  const handleDateConfirm = (date: string | undefined) => {
+    if (business && pendingCartAction) {
+      // Add to cart with selected date
+      addToCart(inventory, business, date);
+      
+      if (pendingCartAction === 'buyNow') {
+        // Open cart drawer
+        openCart();
+        
+        // Call parent's onBuyNow if provided
+        if (onBuyNow) {
+          onBuyNow(inventory, business);
+        }
+      }
     }
-  }, [user, inventory.inventoryId, isOutOfStock]);
-
-  const handleNotifyMe = async (event: React.MouseEvent) => {
-    event.stopPropagation();
-    if (!user || !business) return;
-    
-    try {
-      setSubscribing(true);
-      await stockNotificationService.subscribe(
-        user.phoneNumber,
-        inventory.inventoryId,
-        'INVENTORY',
-        inventory.inventoryName,
-        business.businessId
-      );
-      setIsSubscribed(true);
-      setSnackbar({ open: true, message: 'You will be notified when this item is back in stock!', severity: 'success' });
-    } catch (error: any) {
-      setSnackbar({ open: true, message: error.message || 'Failed to subscribe to notifications', severity: 'error' });
-    } finally {
-      setSubscribing(false);
-    }
+    setDatePickerOpen(false);
+    setPendingCartAction(null);
   };
+
 
   useEffect(() => {
     fetchInventoryImages();
@@ -307,24 +285,6 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             />
           </Box>
         )}
-
-        {/* Status Chips */}
-        <Box sx={{ position: 'absolute', top: 8, right: 8, zIndex: 3, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {isOutOfStock && (
-            <Chip 
-              label="Out of Stock" 
-              color="error"
-              size="small"
-            />
-          )}
-          {!isOutOfStock && (
-            <Chip
-              label={inventory.isActive ? 'Available' : 'Unavailable'}
-              color={inventory.isActive ? 'success' : 'default'}
-              size="small"
-            />
-          )}
-        </Box>
       </Box>
 
       {/* Content Section */}
@@ -543,30 +503,8 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           )}
         </Box>
 
-        {/* Out of Stock - Notify Me Button */}
-        {isOutOfStock && user && user.userType === 'CLIENT' && (
-          <Button
-            variant={isSubscribed ? "contained" : "outlined"}
-            color={isSubscribed ? "success" : "primary"}
-            size="small"
-            startIcon={<NotificationsIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
-            onClick={handleNotifyMe}
-            disabled={subscribing || isSubscribed}
-            fullWidth
-            sx={{
-              fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
-              padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
-              minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
-              mb: 2,
-              mt: 'auto'
-            }}
-          >
-            {subscribing ? 'Subscribing...' : isSubscribed ? 'Notification Set' : 'Notify Me When Available'}
-          </Button>
-        )}
-        
-        {/* Cart and Buy Now Buttons - Only show when in stock */}
-        {business && !isOutOfStock && (showCartButton || showBuyNowButton) && (
+        {/* Cart and Buy Now Buttons - Always show, date picker will handle availability */}
+        {business && (showCartButton || showBuyNowButton) && (
           <Box sx={{ mb: 2, mt: 'auto' }}>
             <Box 
               display="flex" 
@@ -689,6 +627,30 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Date Picker Dialog */}
+      {business && (
+        <DatePickerDialog
+          open={datePickerOpen}
+          onClose={() => {
+            setDatePickerOpen(false);
+            setPendingCartAction(null);
+          }}
+          onConfirm={handleDateConfirm}
+          itemId={inventory.inventoryId}
+          itemType="inventory"
+          itemName={inventory.inventoryName}
+          businessId={business.businessId}
+          title="Select Booking Date for Inventory"
+          onNotify={(date) => {
+            setSnackbar({ 
+              open: true, 
+              message: `You will be notified when "${inventory.inventoryName}" becomes available on ${date}`, 
+              severity: 'success' 
+            });
+          }}
+        />
+      )}
     </Card>
   );
 };

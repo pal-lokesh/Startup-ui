@@ -7,7 +7,6 @@ import {
   Stepper,
   Step,
   StepLabel,
-  StepContent,
   Avatar,
   Chip,
   LinearProgress,
@@ -16,10 +15,6 @@ import {
   Grid,
   Paper,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemAvatar,
 } from '@mui/material';
 import {
   ShoppingCart as ShoppingCartIcon,
@@ -34,6 +29,7 @@ import {
   Email as EmailIcon,
 } from '@mui/icons-material';
 import { Order } from '../types/cart';
+import { getOrderDisplayTitle } from '../utils/orderDisplay';
 
 interface OrderStatusTrackerProps {
   order: Order;
@@ -183,6 +179,7 @@ const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
   };
 
   const steps = getOrderSteps();
+  const firstIncompleteStepIndex = steps.findIndex(step => !step.completed);
   const progress = getOrderProgress();
   const statusMessage = getOrderStatusMessage();
 
@@ -198,7 +195,7 @@ const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
               </Avatar>
               <Box>
                 <Typography variant="h6">
-                  Order #{order.orderId}
+                  {getOrderDisplayTitle(order)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {formatDate(order.orderDate)}
@@ -241,47 +238,67 @@ const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
           <Typography variant="h6" gutterBottom>
             Order Timeline
           </Typography>
-          <List>
+          <Stepper
+            orientation="horizontal"
+            sx={{
+              flexWrap: { xs: 'wrap', md: 'nowrap' },
+              '& .MuiStepLabel-root': {
+                flexDirection: 'column',
+                alignItems: 'center',
+                '& .MuiStepLabel-label': {
+                  marginTop: 1,
+                  textAlign: 'center'
+                }
+              }
+            }}
+          >
             {steps.map((step, index) => (
-              <ListItem key={index} sx={{ alignItems: 'flex-start', py: 2 }}>
-                <ListItemAvatar>
-                  <Avatar 
-                    sx={{ 
-                      bgcolor: step.completed ? 'success.main' : 'grey.300',
-                      color: 'white',
-                      width: 40,
-                      height: 40
-                    }}
-                  >
-                    {step.icon}
-                  </Avatar>
-                </ListItemAvatar>
-                <ListItemText
-                  primary={
-                    <Box>
-                      <Typography 
-                        variant="body1" 
-                        fontWeight={step.completed ? 'bold' : 'normal'}
-                        color={step.completed ? 'success.main' : 'text.primary'}
-                      >
-                        {step.label}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {step.description}
-                      </Typography>
-                    </Box>
-                  }
-                  secondary={
-                    step.completed && (
-                      <Typography variant="caption" color="success.main">
-                        ✓ Completed
-                      </Typography>
-                    )
-                  }
-                />
-              </ListItem>
+              <Step
+                key={index}
+                completed={step.completed}
+                active={!step.completed && index === firstIncompleteStepIndex}
+              >
+                <StepLabel
+                  StepIconComponent={() => (
+                    <Avatar
+                      sx={{
+                        bgcolor: step.completed ? 'success.main' : 'grey.300',
+                        width: 48,
+                        height: 48,
+                        border: step.completed ? '3px solid #4caf50' : '3px solid #e0e0e0',
+                        boxShadow: step.completed ? '0 2px 8px rgba(76, 175, 80, 0.3)' : 'none'
+                      }}
+                    >
+                      {step.icon}
+                    </Avatar>
+                  )}
+                  sx={{
+                    '& .MuiStepLabel-label': {
+                      fontSize: '0.875rem',
+                      fontWeight: step.completed ? 'bold' : 'normal',
+                      color: step.completed ? 'success.main' : 'text.primary',
+                      mt: 1
+                    }
+                  }}
+                >
+                  {step.label}
+                </StepLabel>
+                <Box sx={{ mt: 1, textAlign: 'center', px: 1 }}>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                    {step.description}
+                  </Typography>
+                  {step.completed && (
+                    <Chip
+                      label="✓"
+                      size="small"
+                      color="success"
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
+                  )}
+                </Box>
+              </Step>
             ))}
-          </List>
+          </Stepper>
         </CardContent>
       </Card>
 

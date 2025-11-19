@@ -15,10 +15,14 @@ import {
 import { Star, RateReview } from '@mui/icons-material';
 import { Rating, RatingStats } from '../types/rating';
 import { ratingService } from '../services/ratingService';
+import { useAuth } from '../contexts/AuthContext';
+import BusinessService from '../services/businessService';
+import orderService from '../services/orderService';
+import { OrderStatus } from '../types';
 
 interface RatingDisplayProps {
   itemId: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   businessId: string;
   onRateClick?: () => void;
   showRateButton?: boolean;
@@ -36,10 +40,62 @@ const RatingDisplay: React.FC<RatingDisplayProps> = ({
   const [ratingStats, setRatingStats] = useState<RatingStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isVendorOwner, setIsVendorOwner] = useState(false);
+  const [hasDeliveredOrder, setHasDeliveredOrder] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     loadRatingStats();
   }, [itemId, itemType]);
+
+  useEffect(() => {
+    // Check if current user is a vendor who owns this business
+    const checkVendorOwnership = async () => {
+      if (user && user.userType === 'VENDOR' && user.phoneNumber && businessId) {
+        try {
+          const vendorBusinesses = await BusinessService.getBusinessesByVendorPhoneNumber(user.phoneNumber);
+          const ownsBusiness = vendorBusinesses.some(b => b.businessId === businessId);
+          setIsVendorOwner(ownsBusiness);
+        } catch (err) {
+          console.error('Error checking vendor ownership:', err);
+          setIsVendorOwner(false);
+        }
+      } else {
+        setIsVendorOwner(false);
+      }
+    };
+
+    checkVendorOwnership();
+  }, [user, businessId]);
+
+  useEffect(() => {
+    // Check if client has a delivered order containing this item
+    const checkDeliveredOrder = async () => {
+      if (user && user.userType === 'CLIENT' && user.phoneNumber && itemId && itemType) {
+        try {
+          const orders = await orderService.getOrdersByUserId(user.phoneNumber);
+          // Check if any DELIVERED order contains this item
+          const hasDelivered = orders.some(order => {
+            if (order.status === OrderStatus.DELIVERED && order.orderItems) {
+              return order.orderItems.some(item => 
+                item.itemId === itemId && 
+                item.itemType.toUpperCase() === itemType.toUpperCase()
+              );
+            }
+            return false;
+          });
+          setHasDeliveredOrder(hasDelivered);
+        } catch (err) {
+          console.error('Error checking delivered orders:', err);
+          setHasDeliveredOrder(false);
+        }
+      } else {
+        setHasDeliveredOrder(false);
+      }
+    };
+
+    checkDeliveredOrder();
+  }, [user, itemId, itemType]);
 
   const loadRatingStats = async () => {
     try {
@@ -73,13 +129,18 @@ const RatingDisplay: React.FC<RatingDisplayProps> = ({
     );
   }
 
+  // Don't show rating button if:
+  // 1. Vendor owns this business, OR
+  // 2. Client hasn't received a delivered order for this item
+  const canRate = showRateButton && !isVendorOwner && (user?.userType !== 'CLIENT' || hasDeliveredOrder);
+
   if (!ratingStats || ratingStats.totalRatings === 0) {
     return (
       <Box>
         <Typography variant="body2" color="text.secondary" gutterBottom>
           No ratings yet
         </Typography>
-        {showRateButton && onRateClick && (
+        {canRate && onRateClick && (
           <Button
             size="small"
             startIcon={<Star />}
@@ -105,7 +166,7 @@ const RatingDisplay: React.FC<RatingDisplayProps> = ({
         <Typography variant="body2" color="text.secondary">
           ({ratingStats.totalRatings})
         </Typography>
-        {showRateButton && onRateClick && (
+        {canRate && onRateClick && (
           <Button
             size="small"
             startIcon={<RateReview />}
@@ -138,7 +199,7 @@ const RatingDisplay: React.FC<RatingDisplayProps> = ({
           size="small"
           variant="outlined"
         />
-        {showRateButton && onRateClick && (
+        {canRate && onRateClick && (
           <Button
             size="small"
             startIcon={<RateReview />}

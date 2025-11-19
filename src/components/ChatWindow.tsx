@@ -156,7 +156,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         
         {chat.orderId && (
           <Chip
-            label={`Order #${chat.orderId}`}
+            label="Order"
             size="small"
             color="primary"
             variant="outlined"

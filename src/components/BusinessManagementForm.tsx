@@ -39,12 +39,15 @@ const BusinessManagementForm: React.FC<BusinessManagementFormProps> = ({
     businessDescription: '',
     businessCategory: '',
     businessAddress: '',
+    latitude: undefined,
+    longitude: undefined,
     businessPhone: '',
     businessEmail: '',
     website: '',
     socialMediaLinks: '',
     operatingHours: '',
   });
+  const [geocodingLoading, setGeocodingLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,6 +64,8 @@ const BusinessManagementForm: React.FC<BusinessManagementFormProps> = ({
         businessDescription: business.businessDescription,
         businessCategory: business.businessCategory,
         businessAddress: business.businessAddress,
+        latitude: business.latitude,
+        longitude: business.longitude,
         businessPhone: business.businessPhone,
         businessEmail: business.businessEmail,
         website: business.website || '',
@@ -75,6 +80,8 @@ const BusinessManagementForm: React.FC<BusinessManagementFormProps> = ({
         businessDescription: '',
         businessCategory: '',
         businessAddress: '',
+        latitude: undefined,
+        longitude: undefined,
         businessPhone: user?.phoneNumber || '',
         businessEmail: user?.email || '',
         website: '',
@@ -101,6 +108,33 @@ const BusinessManagementForm: React.FC<BusinessManagementFormProps> = ({
     }));
   };
 
+  const handleGeocodeAddress = async () => {
+    if (!formData.businessAddress || formData.businessAddress.trim() === '') {
+      setError('Please enter an address to geocode');
+      return;
+    }
+
+    try {
+      setGeocodingLoading(true);
+      setError(null);
+      const response = await BusinessService.geocodeAddress(formData.businessAddress);
+      if (response.latitude && response.longitude) {
+        setFormData(prev => ({
+          ...prev,
+          latitude: response.latitude,
+          longitude: response.longitude,
+        }));
+      } else {
+        setError('Unable to geocode address. You can manually enter coordinates.');
+      }
+    } catch (err: any) {
+      console.error('Error geocoding address:', err);
+      setError('Failed to geocode address. You can manually enter coordinates.');
+    } finally {
+      setGeocodingLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -116,8 +150,12 @@ const BusinessManagementForm: React.FC<BusinessManagementFormProps> = ({
       let updatedBusiness: Business;
       
       if (business) {
-        // Update existing business
-        updatedBusiness = await BusinessService.updateBusiness(business.businessId, formData);
+        // Update existing business - pass vendor phone for authorization
+        updatedBusiness = await BusinessService.updateBusiness(
+          business.businessId, 
+          formData,
+          user?.phoneNumber
+        );
       } else {
         // Create new business
         updatedBusiness = await BusinessService.createBusiness(formData);
@@ -195,14 +233,56 @@ const BusinessManagementForm: React.FC<BusinessManagementFormProps> = ({
               />
             </Grid>
             <Grid item xs={12}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                <TextField
+                  required
+                  fullWidth
+                  name="businessAddress"
+                  label="Business Address"
+                  value={formData.businessAddress}
+                  onChange={handleInputChange}
+                  margin="normal"
+                />
+                <Button
+                  variant="outlined"
+                  onClick={handleGeocodeAddress}
+                  disabled={geocodingLoading || !formData.businessAddress}
+                  sx={{ mt: 2, minWidth: '120px' }}
+                >
+                  {geocodingLoading ? 'Getting...' : 'Get Location'}
+                </Button>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
-                required
                 fullWidth
-                name="businessAddress"
-                label="Business Address"
-                value={formData.businessAddress}
-                onChange={handleInputChange}
+                name="latitude"
+                label="Latitude"
+                type="number"
+                value={formData.latitude || ''}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  latitude: e.target.value ? parseFloat(e.target.value) : undefined
+                }))}
                 margin="normal"
+                placeholder="e.g., 28.6139"
+                helperText="Optional: For location-based filtering"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                name="longitude"
+                label="Longitude"
+                type="number"
+                value={formData.longitude || ''}
+                onChange={(e) => setFormData(prev => ({
+                  ...prev,
+                  longitude: e.target.value ? parseFloat(e.target.value) : undefined
+                }))}
+                margin="normal"
+                placeholder="e.g., 77.2090"
+                helperText="Optional: For location-based filtering"
               />
             </Grid>
             <Grid item xs={12} sm={6}>

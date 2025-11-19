@@ -14,16 +14,30 @@ class OrderService {
   async createOrder(cartItems: CartItem[], orderData: OrderFormData, userId: string): Promise<Order> {
     try {
       // Transform cart items to match backend API structure
-      const orderItems = cartItems.map(item => ({
-        itemId: item.id,
-        itemName: item.name,
-        itemPrice: item.price,
-        quantity: item.quantity,
-        itemType: item.type,
-        businessId: item.businessId,
-        businessName: item.businessName,
-        imageUrl: item.imageUrl
-      }));
+      const orderItems = cartItems.map(item => {
+        const orderItem: any = {
+          itemId: item.id,
+          itemName: item.name,
+          itemPrice: item.price,
+          quantity: item.quantity,
+          itemType: item.type,
+          businessId: item.businessId,
+          businessName: item.businessName,
+          imageUrl: item.imageUrl || item.image,
+        };
+        
+        // Only include bookingDate if it's provided and not empty
+        if (item.bookingDate && item.bookingDate.trim() !== '') {
+          orderItem.bookingDate = item.bookingDate;
+        }
+        
+        // Include selected dishes for plates
+        if (item.type === 'plate' && item.selectedDishes && item.selectedDishes.length > 0) {
+          orderItem.selectedDishes = JSON.stringify(item.selectedDishes);
+        }
+        
+        return orderItem;
+      });
 
       const orderPayload = {
         userId: userId,
@@ -32,9 +46,11 @@ class OrderService {
         customerPhone: orderData.customerPhone,
         deliveryAddress: orderData.deliveryAddress,
         deliveryDate: orderData.deliveryDate,
-        specialNotes: orderData.specialNotes,
+        specialNotes: orderData.specialNotes || '',
         items: orderItems
       };
+
+      console.log('Creating order with payload:', JSON.stringify(orderPayload, null, 2));
 
       const response = await fetch(API_BASE_URL, {
         method: 'POST',
@@ -43,14 +59,48 @@ class OrderService {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        // Try to parse error response
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        
+        // Clone the response so we can read it multiple times if needed
+        const responseClone = response.clone();
+        
+        try {
+          const errorData = await response.json();
+          console.log('Error response data:', errorData);
+          // Handle different error response formats
+          if (typeof errorData === 'string') {
+            errorMessage = errorData;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          // If response is not JSON, try to get text from clone
+          try {
+            const errorText = await responseClone.text();
+            console.log('Error response text:', errorText);
+            if (errorText) {
+              errorMessage = errorText;
+            }
+          } catch (textError) {
+            console.error('Error reading response text:', textError);
+            // Keep default error message
+          }
+        }
+        console.error('Final error message:', errorMessage);
+        throw new Error(errorMessage);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating order:', error);
-      throw error;
+      // Re-throw with proper error message
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(error.message || 'Failed to create order');
     }
   }
 
@@ -98,13 +148,48 @@ class OrderService {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Try to parse error response
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        
+        // Clone the response so we can read it multiple times if needed
+        const responseClone = response.clone();
+        
+        try {
+          const errorData = await response.json();
+          console.log('Error response data:', errorData);
+          // Handle different error response formats
+          if (typeof errorData === 'string') {
+            errorMessage = errorData;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          // If response is not JSON, try to get text from clone
+          try {
+            const errorText = await responseClone.text();
+            console.log('Error response text:', errorText);
+            if (errorText) {
+              errorMessage = errorText;
+            }
+          } catch (textError) {
+            console.error('Error reading response text:', textError);
+            // Keep default error message
+          }
+        }
+        console.error('Final error message:', errorMessage);
+        throw new Error(errorMessage);
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating order status:', error);
-      throw error;
+      // Re-throw with proper error message
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(error.message || 'Failed to update order status');
     }
   }
 
@@ -137,7 +222,21 @@ class OrderService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      
+      // Ensure we always return an array
+      // Handle case where backend might return a single object instead of array
+      if (Array.isArray(data)) {
+        console.log(`Fetched ${data.length} orders for user ${userId}`);
+        return data;
+      } else if (data && typeof data === 'object') {
+        // If it's a single order object, wrap it in an array
+        console.warn('Backend returned single order object instead of array, wrapping it');
+        return [data];
+      } else {
+        console.warn('Unexpected response format, returning empty array');
+        return [];
+      }
     } catch (error) {
       console.error('Error fetching user orders:', error);
       throw error;

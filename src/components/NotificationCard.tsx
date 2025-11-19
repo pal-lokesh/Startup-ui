@@ -133,12 +133,16 @@ const NotificationCard: React.FC<NotificationCardProps> = ({
               </Typography>
             </Box>
             
-            <Box display="flex" alignItems="center" gap={1} mb={1}>
-              <TimeIcon fontSize="small" color="action" />
-              <Typography variant="body2" color="text.secondary">
-                Delivery: {new Date(notification.deliveryDate).toLocaleDateString()}
-              </Typography>
-            </Box>
+            {notification.deliveryDate && (
+              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                <TimeIcon fontSize="small" color="action" />
+                <Typography variant="body2" color="text.secondary">
+                  {notification.notificationType === 'STOCK_AVAILABLE' 
+                    ? `Available Date: ${new Date(notification.deliveryDate).toLocaleDateString()}`
+                    : `Delivery: ${new Date(notification.deliveryDate).toLocaleDateString()}`}
+                </Typography>
+              </Box>
+            )}
 
             <Typography variant="h6" color="primary" sx={{ mt: 1 }}>
               {formatPrice(notification.totalAmount)}

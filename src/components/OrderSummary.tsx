@@ -33,6 +33,7 @@ import {
   Store as StoreIcon,
 } from '@mui/icons-material';
 import { Order } from '../types/cart';
+import { getOrderDisplayTitle } from '../utils/orderDisplay';
 
 interface OrderSummaryProps {
   orders: Order[];
@@ -239,7 +240,7 @@ const OrderSummary: React.FC<OrderSummaryProps> = ({ orders }) => {
                         primary={
                           <Box display="flex" justifyContent="space-between" alignItems="center">
                             <Typography variant="body1">
-                              Order #{order.orderId}
+                              {getOrderDisplayTitle(order)}
                             </Typography>
                             <Chip 
                               label={order.status} 

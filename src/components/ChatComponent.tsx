@@ -208,14 +208,17 @@ const ChatComponent: React.FC<ChatComponentProps> = ({
             {userType === 'CLIENT' ? 'My Conversations' : 'Business Conversations'}
           </Typography>
           <Box display="flex" gap={1}>
-            <Button
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => setCreateChatOpen(true)}
-              size="small"
-            >
-              New Chat
-            </Button>
+            {/* Only show "New Chat" button for clients - vendors can only reply to existing conversations */}
+            {userType === 'CLIENT' && (
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => setCreateChatOpen(true)}
+                size="small"
+              >
+                New Chat
+              </Button>
+            )}
             <Button
               variant="outlined"
               startIcon={<RefreshIcon />}

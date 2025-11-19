@@ -12,38 +12,37 @@ import {
   Box,
   Typography,
   Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
-import { Plate, PlateFormData } from '../types';
-import PlateService from '../services/plateService';
+import { Dish, DishFormData } from '../types';
+import dishService from '../services/dishService';
 import { useAuth } from '../contexts/AuthContext';
 
-interface PlateManagementFormProps {
+interface DishManagementFormProps {
   open: boolean;
   onClose: () => void;
-  plate: Plate | null;
+  dish: Dish | null;
   businessId: string;
-  onSuccess: (plate: Plate) => void;
+  onSuccess: (dish: Dish) => void;
 }
 
-const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
+const DishManagementForm: React.FC<DishManagementFormProps> = ({
   open,
   onClose,
-  plate,
+  dish,
   businessId,
   onSuccess,
 }) => {
-  const [formData, setFormData] = useState<PlateFormData>({
+  const [formData, setFormData] = useState<DishFormData>({
     businessId: businessId,
     dishName: '',
     dishDescription: '',
-    plateImage: '',
+    dishImage: '',
     price: 0,
-    dishType: 'veg',
     quantity: 0,
+    isAvailable: true,
+    availabilityDates: [],
   });
   const [priceInput, setPriceInput] = useState<string>('');
   const [quantityInput, setQuantityInput] = useState<string>('');
@@ -55,27 +54,29 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
 
   useEffect(() => {
     if (open) {
-      if (plate) {
+      if (dish) {
         setFormData({
-          businessId: plate.businessId,
-          dishName: plate.dishName,
-          dishDescription: plate.dishDescription,
-          plateImage: plate.plateImage,
-          price: plate.price,
-          dishType: plate.dishType || 'veg', // Default to 'veg' if undefined
-          quantity: plate.quantity || 0,
+          businessId: dish.businessId,
+          dishName: dish.dishName,
+          dishDescription: dish.dishDescription,
+          dishImage: dish.dishImage,
+          price: dish.price,
+          quantity: dish.quantity || 0,
+          isAvailable: dish.isAvailable,
+          availabilityDates: dish.availabilityDates || [],
         });
-        setPriceInput(plate.price.toString());
-        setQuantityInput((plate.quantity || 0).toString());
+        setPriceInput(dish.price.toString());
+        setQuantityInput((dish.quantity || 0).toString());
       } else {
         setFormData({
           businessId: businessId,
           dishName: '',
           dishDescription: '',
-          plateImage: '',
+          dishImage: '',
           price: 0,
-          dishType: 'veg',
           quantity: 0,
+          isAvailable: true,
+          availabilityDates: [],
         });
         setPriceInput('');
         setQuantityInput('');
@@ -84,7 +85,7 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
       setImageUploading(false);
       setError(null);
     }
-  }, [plate, businessId, open]);
+  }, [dish, businessId, open]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -118,6 +119,14 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
     }));
   };
 
+  const handleSwitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: checked,
+    }));
+  };
+
   const convertToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -130,72 +139,64 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
     });
   };
 
-  const handleSelectChange = (e: any) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.dishName || !formData.dishDescription || formData.price <= 0 || !formData.dishType) {
-      setError('Please fill in all required fields including dish type and ensure price is greater than 0');
+    if (!formData.dishName || !formData.dishDescription || formData.price <= 0) {
+      setError('Please fill in all required fields and ensure price is greater than 0');
       return;
     }
 
-    // Check if image is uploaded for new plates
-    if (!plate && !uploadedImage) {
-      setError('Please upload an image for the plate');
-      return;
-    }
+    // Note: Image is not required on creation - can be added via update
+    // if (!dish && !uploadedImage) {
+    //   setError('Please upload an image for the dish');
+    //   return;
+    // }
 
     try {
       setLoading(true);
       setError(null);
 
-      let updatedPlate: Plate;
+      let updatedDish: Dish;
       
-      if (plate) {
-        // Update existing plate - pass vendor phone for authorization
+      if (dish) {
+        // Update existing dish - pass vendor phone for authorization
         if (uploadedImage) {
           setImageUploading(true);
           try {
             const dataUrl = await convertToBase64(uploadedImage);
-            updatedPlate = await PlateService.updatePlate(plate.plateId, {
+            updatedDish = await dishService.updateDish(dish.dishId, {
               ...formData,
-              plateImage: dataUrl,
+              dishImage: dataUrl,
             }, user?.phoneNumber);
           } catch (imageErr) {
             console.error('Error uploading image:', imageErr);
             // Fall back to updating without image change
-            updatedPlate = await PlateService.updatePlate(plate.plateId, formData, user?.phoneNumber);
+            updatedDish = await dishService.updateDish(dish.dishId, formData, user?.phoneNumber);
           } finally {
             setImageUploading(false);
           }
         } else {
           // Update without changing image - keep existing image
-          updatedPlate = await PlateService.updatePlate(plate.plateId, {
+          updatedDish = await dishService.updateDish(dish.dishId, {
             ...formData,
-            plateImage: formData.plateImage, // Preserve existing image
+            dishImage: formData.dishImage, // Preserve existing image
           }, user?.phoneNumber);
         }
       } else {
-        // Create new plate - pass vendor phone for authorization
-        updatedPlate = await PlateService.createPlate(formData, user?.phoneNumber);
+        // Create new dish - pass vendor phone for authorization
+        updatedDish = await dishService.createDish(formData, user?.phoneNumber);
         
         // Upload image if one was selected
         if (uploadedImage) {
           setImageUploading(true);
           try {
             const dataUrl = await convertToBase64(uploadedImage);
-            const updatedPlateWithImage = await PlateService.updatePlate(updatedPlate.plateId, {
+            const updatedDishWithImage = await dishService.updateDish(updatedDish.dishId, {
               ...formData,
-              plateImage: dataUrl,
+              dishImage: dataUrl,
             });
-            updatedPlate = updatedPlateWithImage;
+            updatedDish = updatedDishWithImage;
           } catch (imageErr) {
             console.error('Error uploading image:', imageErr);
             // Don't fail the entire operation if image upload fails
@@ -205,11 +206,18 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
         }
       }
 
-      onSuccess(updatedPlate);
+      onSuccess(updatedDish);
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to save plate');
-      console.error('Error saving plate:', err);
+      const errorMessage = err.message || err.response?.data?.error || err.response?.data?.message || 'Failed to save dish';
+      setError(errorMessage);
+      console.error('Error saving dish:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response,
+        status: err.response?.status,
+        data: err.response?.data
+      });
     } finally {
       setLoading(false);
     }
@@ -227,7 +235,7 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        {plate ? 'Edit Plate' : 'Add New Plate'}
+        {dish ? 'Edit Dish' : 'Add New Dish'}
       </DialogTitle>
       <DialogContent>
         {error && (
@@ -289,39 +297,41 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
                 margin="normal"
                 inputProps={{ min: 0, step: 1 }}
                 placeholder="Enter available quantity"
-                helperText="Number of plates available in stock"
+                helperText="Number of dishes available in stock"
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth margin="normal" required>
-                <InputLabel>Dish Type</InputLabel>
-                <Select
-                  name="dishType"
-                  value={formData.dishType}
-                  onChange={handleSelectChange}
-                  label="Dish Type"
-                >
-                  <MenuItem value="veg">Vegetarian</MenuItem>
-                  <MenuItem value="non-veg">Non-Vegetarian</MenuItem>
-                </Select>
-              </FormControl>
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.isAvailable}
+                    onChange={handleSwitchChange}
+                    name="isAvailable"
+                    color="primary"
+                  />
+                }
+                label="Available"
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Toggle availability status for this dish
+              </Typography>
             </Grid>
           </Grid>
 
           {/* Image Upload Section */}
           <Divider sx={{ my: 3 }} />
           <Typography variant="h6" gutterBottom>
-            {plate ? 'Update Plate Image' : 'Upload Plate Image'} {!plate && <span style={{ color: 'red' }}>*</span>}
+            {dish ? 'Update Dish Image' : 'Upload Dish Image'} {!dish && <span style={{ color: 'red' }}>*</span>}
           </Typography>
-          {plate && formData.plateImage && (
+          {dish && formData.dishImage && (
             <Box sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Current Image:
               </Typography>
               <Box
                 component="img"
-                src={formData.plateImage}
-                alt="Current plate"
+                src={formData.dishImage}
+                alt="Current dish"
                 sx={{
                   maxWidth: '200px',
                   maxHeight: '200px',
@@ -335,7 +345,7 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
             </Box>
           )}
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {plate ? 'Select a new image to update, or leave empty to keep the current image.' : 'An image is required for the plate.'}
+            {dish ? 'Select a new image to update, or leave empty to keep the current image.' : 'An image is required for the dish.'}
           </Typography>
           
           <Box sx={{ mb: 2 }}>
@@ -347,16 +357,16 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
                 setUploadedImage(file);
               }}
               style={{ display: 'none' }}
-              id="plate-image-upload"
+              id="dish-image-upload"
             />
-            <label htmlFor="plate-image-upload">
+            <label htmlFor="dish-image-upload">
               <Button
                 variant="outlined"
                 component="span"
                 fullWidth
                 sx={{ mb: 2 }}
               >
-                {uploadedImage ? `Selected: ${uploadedImage.name}` : (plate ? 'Change Plate Image' : 'Select Plate Image')}
+                {uploadedImage ? `Selected: ${uploadedImage.name}` : (dish ? 'Change Dish Image' : 'Select Dish Image')}
               </Button>
             </label>
             
@@ -387,11 +397,12 @@ const PlateManagementForm: React.FC<PlateManagementFormProps> = ({
           disabled={loading || imageUploading}
           startIcon={(loading || imageUploading) ? <CircularProgress size={20} /> : null}
         >
-          {loading ? 'Saving...' : imageUploading ? 'Uploading Image...' : (plate ? 'Update Plate' : 'Add Plate')}
+          {loading ? 'Saving...' : imageUploading ? 'Uploading Image...' : (dish ? 'Update Dish' : 'Add Dish')}
         </Button>
       </DialogActions>
     </Dialog>
   );
 };
 
-export default PlateManagementForm;
+export default DishManagementForm;
+

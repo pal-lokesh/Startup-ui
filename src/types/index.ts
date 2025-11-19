@@ -144,6 +144,8 @@ export interface BusinessFormData {
   businessDescription: string;
   businessCategory: string;
   businessAddress: string;
+  latitude?: number;
+  longitude?: number;
   businessPhone: string;
   businessEmail: string;
   website?: string;
@@ -157,6 +159,7 @@ export interface ThemeFormData {
   themeDescription: string;
   themeCategory: string;
   priceRange: string;
+  quantity?: number; // Stock quantity
 }
 
 export interface ImageFormData {
@@ -257,6 +260,33 @@ export interface PlateFormData {
   plateImage: string;
   price: number;
   dishType: 'veg' | 'non-veg';
+  quantity?: number;
+}
+
+// Dish Types
+export interface Dish {
+  dishId: string;
+  businessId: string;
+  dishName: string;
+  dishDescription: string;
+  dishImage: string;
+  price: number;
+  quantity?: number;
+  isAvailable: boolean;
+  availabilityDates?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DishFormData {
+  businessId: string;
+  dishName: string;
+  dishDescription: string;
+  dishImage: string;
+  price: number;
+  quantity?: number;
+  isAvailable?: boolean;
+  availabilityDates?: string[];
 }
 
 // Order Types
@@ -278,11 +308,12 @@ export interface Order {
 export interface OrderItem {
   itemId: string;
   itemName: string;
-  itemType: 'THEME' | 'INVENTORY' | 'PLATE';
+  itemType: 'THEME' | 'INVENTORY' | 'PLATE' | 'DISH';
   quantity: number;
   price: number;
   businessId: string;
   businessName: string;
+  bookingDate?: string; // Date for which the item is booked (YYYY-MM-DD format)
 }
 
 export enum OrderStatus {
