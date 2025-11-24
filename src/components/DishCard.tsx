@@ -92,9 +92,6 @@ const DishCard: React.FC<DishCardProps> = ({
       addToCart(dish, business, date);
       
       if (pendingCartAction === 'buyNow') {
-        // Open cart drawer
-        openCart();
-        
         // Call parent's onBuyNow if provided
         if (onBuyNow) {
           onBuyNow(dish, business);
@@ -291,58 +288,27 @@ const DishCard: React.FC<DishCardProps> = ({
             </Box>
           )}
           
-          {/* Cart and Buy Now Buttons */}
-          {business && (showCartButton || showBuyNowButton) && (
+          {/* Cart Button - Only show Add to Cart for clients, no Buy Now */}
+          {business && showCartButton && user?.userType === 'CLIENT' && (
             <Box sx={{ mb: 2 }}>
-              <Box 
-                display="flex" 
-                gap={{ xs: 0.5, sm: 1 }} 
-                flexDirection={{ xs: 'column', sm: 'row' }}
-                sx={{ width: '100%' }}
+              <Button
+                variant={isInCart(dish.dishId, 'dish') ? "contained" : "outlined"}
+                color={isInCart(dish.dishId, 'dish') ? "success" : "primary"}
+                size="small"
+                startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
+                onClick={handleCartToggle}
+                fullWidth
+                sx={{
+                  fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
+                  padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
+                  minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden'
+                }}
               >
-                {showCartButton && (
-                  <Button
-                    variant={isInCart(dish.dishId, 'dish') ? "contained" : "outlined"}
-                    color={isInCart(dish.dishId, 'dish') ? "success" : "primary"}
-                    size="small"
-                    startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
-                    onClick={handleCartToggle}
-                    fullWidth
-                    disabled={isUnavailable}
-                    sx={{
-                      fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
-                      padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
-                      minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {isInCart(dish.dishId, 'dish') ? "In Cart" : "Add to Cart"}
-                  </Button>
-                )}
-                {showBuyNowButton && (
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    size="small"
-                    startIcon={<BuyNowIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
-                    onClick={handleBuyNow}
-                    fullWidth
-                    disabled={isUnavailable}
-                    sx={{
-                      fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
-                      padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
-                      minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    Buy Now
-                  </Button>
-                )}
-              </Box>
+                {isInCart(dish.dishId, 'dish') ? "In Cart" : "Add to Cart"}
+              </Button>
             </Box>
           )}
 

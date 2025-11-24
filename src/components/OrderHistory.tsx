@@ -53,6 +53,7 @@ import RatingComponent from './RatingComponent';
 import { ratingService } from '../services/ratingService';
 import { Rating } from '../types/rating';
 import { useAuth } from '../contexts/AuthContext';
+import orderService from '../services/orderService';
 
 interface OrderHistoryProps {
   orders: Order[];
@@ -70,6 +71,7 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({
   const { user } = useAuth();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [orderDetailOpen, setOrderDetailOpen] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
   
   // Rating state
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
@@ -272,6 +274,31 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (!window.confirm('Are you sure you want to cancel this order? This action cannot be undone.')) {
+      return;
+    }
+
+    setCancellingOrderId(orderId);
+    try {
+      await orderService.cancelOrder(orderId);
+      // Refresh orders list
+      if (onRefresh) {
+        onRefresh();
+      }
+      // Close order detail dialog if it's open for this order
+      if (selectedOrder?.orderId.toString() === orderId) {
+        setOrderDetailOpen(false);
+        setSelectedOrder(null);
+      }
+    } catch (error: any) {
+      console.error('Error cancelling order:', error);
+      alert(`Failed to cancel order: ${error.message || 'Unknown error'}`);
+    } finally {
+      setCancellingOrderId(null);
+    }
   };
 
   const getOrderStatusMessage = (order: Order) => {
@@ -633,6 +660,20 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({
                     >
                       View Full Details
                     </Button>
+                    {user?.userType === 'CLIENT' && 
+                     order.status !== 'DELIVERED' && 
+                     order.status !== 'CANCELLED' && 
+                     order.status !== 'READY' && (
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<CancelIcon />}
+                        onClick={() => handleCancelOrder(order.orderId.toString())}
+                        disabled={cancellingOrderId === order.orderId.toString()}
+                      >
+                        {cancellingOrderId === order.orderId.toString() ? 'Cancelling...' : 'Cancel Order'}
+                      </Button>
+                    )}
                   </Box>
                 </Grid>
 
@@ -1033,6 +1074,21 @@ const OrderHistory: React.FC<OrderHistoryProps> = ({
           )}
         </DialogContent>
         <DialogActions>
+          {user?.userType === 'CLIENT' && 
+           selectedOrder &&
+           selectedOrder.status !== 'DELIVERED' && 
+           selectedOrder.status !== 'CANCELLED' && 
+           selectedOrder.status !== 'READY' && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<CancelIcon />}
+              onClick={() => handleCancelOrder(selectedOrder.orderId.toString())}
+              disabled={cancellingOrderId === selectedOrder.orderId.toString()}
+            >
+              {cancellingOrderId === selectedOrder.orderId.toString() ? 'Cancelling...' : 'Cancel Order'}
+            </Button>
+          )}
           <Button onClick={handleCloseOrderDetail}>
             Close
           </Button>

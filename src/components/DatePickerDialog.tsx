@@ -127,34 +127,54 @@ const DatePickerDialog: React.FC<DatePickerDialogProps> = ({
   }, [selectedDate, itemId, itemType, open, checkAvailability]);
 
   const handleConfirm = () => {
+    console.log('📅 DatePickerDialog handleConfirm called - ADDING TO CART ONLY, NOT PLACING ORDER');
+    console.log('📅 selectedDate:', selectedDate);
+    console.log('📅 availableQuantity:', availableQuantity);
+    console.log('📅 isAlreadySubscribed:', isAlreadySubscribed);
+    
     if (!selectedDate) {
       setError('Please select a booking date.');
       return;
     }
 
-    // Final availability check before confirming
-    if (availableQuantity !== null && availableQuantity > 0) {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      onConfirm(dateStr);
-      onClose();
-    } else {
-      // Date is not available - show notification dialog only if not already subscribed
-      if (isAlreadySubscribed) {
-        setError('You are already subscribed for notifications on this date.');
-      } else {
+    // Always allow confirmation - availability is just informational
+    // Users can add items to cart regardless of availability
+    // IMPORTANT: This only adds to cart, it does NOT place an order
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    console.log('📅 Formatted date string:', dateStr);
+    console.log('📅 This will ONLY add item to cart, NOT place order');
+    
+    // Always confirm immediately - don't block on availability
+    // If user wants notifications, they can subscribe separately
+    console.log('📅 Calling onConfirm with date:', dateStr, '- This adds to cart only');
+    onConfirm(dateStr); // This should call handleDateConfirm which calls addToCart()
+    console.log('📅 Called onConfirm (adds to cart), now calling onClose');
+    onClose();
+    console.log('📅 Called onClose');
+    
+    // Optionally show notification dialog after confirming (non-blocking)
+    if (availableQuantity !== null && availableQuantity === 0 && !isAlreadySubscribed) {
+      console.log('📅 Item not available, will show notification option after cart add');
+      // Show notification dialog after a short delay (non-blocking)
+      setTimeout(() => {
         setShowNotificationDialog(true);
-      }
+      }, 500);
     }
   };
 
-  const handleNotificationConfirm = () => {
+  const handleNotificationConfirm = async () => {
+    console.log('📅 handleNotificationConfirm called');
     setShowNotificationDialog(false);
-    handleNotifyMe();
+    await handleNotifyMe();
+    // Item is already added to cart, just close the notification dialog
+    console.log('📅 Notification subscription completed');
   };
 
   const handleNotificationCancel = () => {
+    console.log('📅 handleNotificationCancel called');
     setShowNotificationDialog(false);
-    // Keep dialog open so user can select another date
+    // Item is already added to cart, just close the notification dialog
+    console.log('📅 Notification dialog cancelled');
   };
 
   const handleDateChange = (date: Date | null) => {
@@ -290,13 +310,9 @@ const DatePickerDialog: React.FC<DatePickerDialogProps> = ({
           <Button
             onClick={handleConfirm}
             variant="contained"
-            disabled={!selectedDate || checkingAvailability || checkingSubscription || subscribing}
+            disabled={!selectedDate || subscribing}
           >
-            {checkingAvailability || checkingSubscription ? 'Checking...' : 
-             subscribing ? 'Subscribing...' :
-             selectedDate && !isDateAvailable && availableQuantity !== null && !isAlreadySubscribed ? 'Not Available - Get Notified?' : 
-             selectedDate && !isDateAvailable && availableQuantity !== null && isAlreadySubscribed ? 'Already Subscribed' :
-             'Confirm'}
+            {subscribing ? 'Subscribing...' : 'Add to Cart'}
           </Button>
         </DialogActions>
       </Dialog>

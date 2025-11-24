@@ -21,6 +21,7 @@ import {
   ListItemAvatar,
   CircularProgress,
   Typography as MuiTypography,
+  Chip,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -39,6 +40,7 @@ import {
   Star as StarIcon,
   CalendarToday as CalendarIcon,
   Restaurant as RestaurantIcon,
+  Inventory as InventoryIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -77,6 +79,8 @@ const Navigation: React.FC = () => {
   const [vendorNotificationMenuAnchor, setVendorNotificationMenuAnchor] = React.useState<null | HTMLElement>(null);
   const [unreadChatCount, setUnreadChatCount] = React.useState(0);
   const [isCateringBusiness, setIsCateringBusiness] = React.useState(false);
+  const [isTentBusiness, setIsTentBusiness] = React.useState(false);
+  const [vendorCategories, setVendorCategories] = React.useState<string[]>([]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -205,7 +209,7 @@ const Navigation: React.FC = () => {
     }
   }, [user]);
 
-  // Fetch vendor's business to determine if it's a catering business
+  // Fetch vendor's business to determine if it's a catering or tent business
   React.useEffect(() => {
     if (user && user.userType === 'VENDOR' && user.phoneNumber) {
       const fetchVendorBusiness = async () => {
@@ -214,15 +218,31 @@ const Navigation: React.FC = () => {
           // Check if any business is catering type
           const hasCateringBusiness = businesses.some(b => b.businessCategory === 'caters');
           setIsCateringBusiness(hasCateringBusiness);
+          
+          // Check if any business is tent type
+          const hasTentBusiness = businesses.some(b => {
+            const category = b.businessCategory?.toLowerCase() || '';
+            return category === 'tent_house' || category === 'tent' || 
+                   (category.includes('tent') && !category.includes('cater'));
+          });
+          setIsTentBusiness(hasTentBusiness);
+          
+          // Store all business categories for vendor profile
+          const categories = businesses.map(b => b.businessCategory).filter(Boolean);
+          setVendorCategories(categories);
         } catch (error) {
           console.error('Error fetching vendor business:', error);
           setIsCateringBusiness(false);
+          setIsTentBusiness(false);
+          setVendorCategories([]);
         }
       };
       
       fetchVendorBusiness();
     } else {
       setIsCateringBusiness(false);
+      setIsTentBusiness(false);
+      setVendorCategories([]);
     }
   }, [user]);
 
@@ -242,12 +262,15 @@ const Navigation: React.FC = () => {
   ];
 
   // Vendor menu items - dynamically change Theme to Plate for catering businesses
+  // Add Inventory for tent businesses
   const getVendorItems = () => {
     const baseVendorItems = [
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/vendor-dashboard' },
       { text: 'Business', icon: <BusinessIcon />, path: '/vendor-dashboard' },
-      { text: isCateringBusiness ? 'Plate' : 'Theme', icon: <PaletteIcon />, path: isCateringBusiness ? '/plates' : '/themes' },
-      ...(isCateringBusiness ? [{ text: 'Dish', icon: <RestaurantIcon />, path: '/vendor-dashboard', activeTab: 2 }] : []),
+      // Theme and Inventory options disabled - removed from navigation
+      // { text: isCateringBusiness ? 'Plate' : 'Theme', icon: <PaletteIcon />, path: isCateringBusiness ? '/plates' : '/themes' },
+      // Dish tab removed for catering businesses
+      // { text: 'Inventory', icon: <InventoryIcon />, path: '/vendor-dashboard', activeTab: 2 } - disabled
       { text: 'Availability', icon: <CalendarIcon />, path: '/availability' },
     ];
     return baseVendorItems;
@@ -312,13 +335,15 @@ const Navigation: React.FC = () => {
                 to={hasActiveTab ? undefined : item.path}
                 onClick={hasActiveTab ? () => {
                   setMobileOpen(false); // Close mobile drawer
+                  const targetTab = (item as any).activeTab;
+                  console.log('Navigating to:', item.path, 'with activeTab:', targetTab);
                   // Force navigation with state - add timestamp to ensure state change is detected
                   navigate(item.path, { 
                     state: { 
-                      activeTab: (item as any).activeTab,
+                      activeTab: targetTab,
                       _timestamp: Date.now() // Force state update
                     },
-                    replace: location.pathname === item.path // Replace if already on same path
+                    replace: false // Always push to ensure state is updated
                   });
                 } : undefined}
                 selected={isSelected}
@@ -599,7 +624,13 @@ const Navigation: React.FC = () => {
                         <MenuItem
                           onClick={() => {
                             handleVendorNotificationMenuClose();
-                            navigate('/vendor-dashboard');
+                            // For catering vendors, navigate to Notifications tab (index 4) in dashboard
+                            // For other vendors, navigate to separate orders page
+                            if (isCateringBusiness) {
+                              navigate('/vendor-dashboard', { state: { activeTab: 4 } });
+                            } else {
+                              navigate('/vendor-orders-notifications');
+                            }
                           }}
                           sx={{ justifyContent: 'center' }}
                         >
@@ -673,6 +704,26 @@ const Navigation: React.FC = () => {
                     Role: {user.userType}
                   </Typography>
                 </MenuItem>
+                {user.userType === 'VENDOR' && vendorCategories.length > 0 && (
+                  <MenuItem disabled>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Category:
+                      </Typography>
+                      <Box display="flex" gap={0.5} flexWrap="wrap" mt={0.5}>
+                        {vendorCategories.map((category, index) => (
+                          <Chip
+                            key={index}
+                            label={category}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                  </MenuItem>
+                )}
                 <Divider />
                 <MenuItem onClick={handleLogout}>
                   <ListItemIcon>

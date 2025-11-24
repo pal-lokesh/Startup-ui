@@ -26,6 +26,7 @@ import {
   Chat as ChatIcon,
   Notifications as NotificationIcon,
   ArrowForward as ArrowForwardIcon,
+  Inventory as InventoryIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import BusinessService from '../services/businessService';
@@ -90,14 +91,35 @@ const VendorDashboard: React.FC = () => {
   const [vendorNotifications, setVendorNotifications] = useState<any[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
 
-  // Update activeTab when location state changes
+  // Update activeTab when location state changes and fetch data
   useEffect(() => {
     const stateActiveTab = (location.state as any)?.activeTab;
-    if (stateActiveTab !== undefined) {
+    console.log('Location state changed:', location.state, 'activeTab from state:', stateActiveTab, 'Current activeTab:', activeTab);
+    if (stateActiveTab !== undefined && stateActiveTab !== activeTab) {
       console.log('Updating activeTab from location state:', stateActiveTab, 'Current activeTab:', activeTab);
       setActiveTab(stateActiveTab);
+      
+      // Fetch data when navigating to Orders or Notifications tab from location state
+      if (stateActiveTab === 3 && selectedBusiness && !isTentBusiness(selectedBusiness)) {
+        console.log('✅ Fetching orders from location state...');
+        fetchOrdersForBusiness();
+      }
+      
+      if (stateActiveTab === 4 && selectedBusiness && !isTentBusiness(selectedBusiness)) {
+        console.log('✅ Fetching notifications from location state...');
+        fetchNotificationCount();
+        fetchVendorNotifications();
+      }
     }
-  }, [location]);
+  }, [location, selectedBusiness]);
+
+  // Debug: Log activeTab changes
+  useEffect(() => {
+    console.log('🟢 activeTab changed to:', activeTab);
+    console.log('🟢 selectedBusiness:', selectedBusiness?.businessName);
+    console.log('🟢 isTentBusiness:', isTentBusiness(selectedBusiness));
+    console.log('🟢 Should show Orders?', selectedBusiness && !isTentBusiness(selectedBusiness) && activeTab === 3);
+  }, [activeTab, selectedBusiness]);
 
   // Debug: Track dishes state changes
   useEffect(() => {
@@ -558,66 +580,115 @@ const VendorDashboard: React.FC = () => {
            (category.includes('tent') && !category.includes('cater'));
   };
 
-  // Helper function to get the correct Orders tab index
-  // This must match the actual tab rendering order in the JSX
-  const getOrdersTabIndex = () => {
-    if (!selectedBusiness || isTentBusiness(selectedBusiness)) {
-      return -1; // Orders tab not shown for tent businesses
-    }
+  // Helper function to get the actual tab index for a given tab label
+  const getTabIndex = (tabLabel: string): number => {
+    if (!selectedBusiness) return -1;
     
-    // Tab order in JSX:
-    // 0: Overview (always)
-    // 1: Theme (if tent) OR Themes (if not tent and not caters) OR Plate (if caters)
-    // 2: Inventory (if not tent and not caters) OR Dish (if caters) OR Orders (if not tent) OR Explore (if tent)
-    // 3: Orders (if not tent and not caters) OR Explore (if tent)
+    let index = 0; // Overview is always first
     
-    let index = 1; // Start after Overview tab (index 0)
-    
-    if (selectedBusiness.businessCategory === 'caters') {
-      // For catering: Overview(0), Plate(1), Dish(2), Orders(3)
-      index = 3;
+    if (isTentBusiness(selectedBusiness)) {
+      // Tent: Overview(0), Theme(1), Inventory(2), Explore(3)
+      if (tabLabel === 'Overview') return 0;
+      if (tabLabel === 'Theme') return 1;
+      if (tabLabel === 'Inventory') return 2;
+      if (tabLabel === 'Explore') return 3;
+    } else if (selectedBusiness.businessCategory === 'caters') {
+      // Catering: Overview(0), Plate(1), Dish(2), Orders(3), Notifications(4), Explore(5)
+      if (tabLabel === 'Overview') return 0;
+      if (tabLabel === 'Plate') return 1;
+      if (tabLabel === 'Dish') return 2;
+      if (tabLabel === 'Orders') return 3;
+      if (tabLabel === 'Notifications') return 4;
+      if (tabLabel === 'Explore') return 5;
     } else {
-      // For non-catering: Overview(0), Themes(1), Inventory(2), Orders(3)
-      index = 3;
+      // Non-catering: Overview(0), Themes(1), Inventory(2), Orders(3), Notifications(4)
+      if (tabLabel === 'Overview') return 0;
+      if (tabLabel === 'Themes') return 1;
+      if (tabLabel === 'Inventory') return 2;
+      if (tabLabel === 'Orders') return 3;
+      if (tabLabel === 'Notifications') return 4;
     }
     
-    return index;
+    return -1;
+  };
+
+  // Helper to check if current activeTab matches a specific tab
+  const isTabActive = (tabLabel: string): boolean => {
+    return activeTab === getTabIndex(tabLabel);
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    console.log('Tab changed to:', newValue);
-    console.log('Business category:', selectedBusiness?.businessCategory);
-    console.log('Is tent business:', isTentBusiness(selectedBusiness));
+    console.log('🔵 ========== TAB CLICKED ==========');
+    console.log('🔵 newValue (tab index):', newValue);
+    console.log('🔵 Business category:', selectedBusiness?.businessCategory);
+    console.log('🔵 Is tent business:', isTentBusiness(selectedBusiness));
+    console.log('🔵 Current activeTab:', activeTab);
     
-    // If it's the Explore tab for tent business, navigate to explore page
-    if (isTentBusiness(selectedBusiness) && newValue === 2) {
-      navigate('/explore');
+    // Material-UI Tabs use the index based on the order of tabs in JSX
+    // We need to calculate the actual tab indices based on what's rendered
+    
+    // Calculate which tabs are actually rendered
+    let tabLabels: string[] = ['Overview'];
+    
+    if (isTentBusiness(selectedBusiness)) {
+      tabLabels.push('Theme', 'Inventory', 'Explore');
+    } else if (selectedBusiness?.businessCategory === 'caters') {
+      tabLabels.push('Plate', 'Dish', 'Orders', 'Notifications', 'Explore');
+    } else {
+      tabLabels.push('Themes', 'Inventory', 'Orders', 'Notifications');
+    }
+    
+    console.log('🔵 Tab labels in order:', tabLabels);
+    console.log('🔵 Total tabs:', tabLabels.length);
+    
+    // Safety check - make sure newValue is within bounds
+    if (newValue < 0 || newValue >= tabLabels.length) {
+      console.error('❌ Invalid tab index:', newValue, 'Max index:', tabLabels.length - 1);
       return;
     }
     
+    const clickedTabLabel = tabLabels[newValue];
+    console.log('🔵 Clicked tab label:', clickedTabLabel);
+    
+    // If it's the Explore tab, navigate to explore page IMMEDIATELY and don't update state
+    if (clickedTabLabel === 'Explore') {
+      console.log('🔵 Navigating to Explore page...');
+      navigate('/explore');
+      return; // Don't update activeTab or fetch data
+    }
+    
+    // Update active tab state
+    console.log('🔵 Setting activeTab to:', newValue);
     setActiveTab(newValue);
     
-    // Fetch orders and notifications when Orders tab is selected
-    // For catering: tab index 3, for non-catering: tab index 3
-    const isOrdersTab = selectedBusiness && !isTentBusiness(selectedBusiness) && (
-      (selectedBusiness.businessCategory === 'caters' && newValue === 3) ||
-      (selectedBusiness.businessCategory !== 'caters' && newValue === 3)
-    );
+    // Determine which tab was clicked
+    const isOrdersTab = clickedTabLabel === 'Orders';
+    const isNotificationsTab = clickedTabLabel === 'Notifications';
     
-    console.log('Tab change:', {
+    console.log('🔵 Tab analysis:', {
       newValue,
+      clickedTabLabel,
       businessCategory: selectedBusiness?.businessCategory,
       isOrdersTab,
+      isNotificationsTab,
       isTent: isTentBusiness(selectedBusiness)
     });
     
     if (isOrdersTab) {
-      console.log('✅ Fetching orders and notifications...');
-      // Fetch all data for Orders & Notifications tab
+      console.log('✅ Orders tab clicked - Fetching orders...');
+      console.log('✅ activeTab set to:', newValue);
+      console.log('✅ Will show Orders content when activeTab === 3');
       fetchOrdersForBusiness();
+    }
+    
+    if (isNotificationsTab) {
+      console.log('✅ Notifications tab clicked - Fetching notifications...');
       fetchNotificationCount();
       fetchVendorNotifications();
     }
+    
+    console.log('🔵 ========== TAB CHANGE COMPLETE ==========');
+    console.log('🔵 Final activeTab value:', newValue);
   };
 
   const fetchOrdersForBusiness = async () => {
@@ -859,17 +930,24 @@ const VendorDashboard: React.FC = () => {
           </Grid>
           
           <Grid item xs={12} sm={6} md={4}>
-            <Card 
-              sx={{ 
+            {selectedBusiness && !isTentBusiness(selectedBusiness) && (
+            <Card
+              sx={{
                 cursor: 'pointer',
-                '&:hover': { 
+                '&:hover': {
                   boxShadow: 4,
                   transform: 'translateY(-2px)',
                   transition: 'all 0.2s ease-in-out'
                 }
               }}
               onClick={() => {
-                navigate('/vendor-orders-notifications');
+                // For catering vendors, navigate to Orders tab in dashboard (index 3)
+                // For non-catering vendors, navigate to separate orders page
+                if (selectedBusiness.businessCategory === 'caters') {
+                  setActiveTab(3); // Orders tab
+                } else {
+                  navigate('/vendor-orders-notifications');
+                }
               }}
             >
               <CardContent>
@@ -903,36 +981,105 @@ const VendorDashboard: React.FC = () => {
                 )}
               </CardContent>
             </Card>
+            )}
           </Grid>
         </Grid>
       </Box>
 
       {selectedBusiness && (
         <>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3, position: 'relative', zIndex: 1 }}>
             <Tabs 
               value={activeTab} 
-              onChange={handleTabChange}
+              onChange={(e, newValue) => {
+                console.log('🔴 Tabs onChange called directly!', { newValue, currentActiveTab: activeTab, event: e });
+                if (newValue !== activeTab) {
+                  handleTabChange(e, newValue);
+                } else {
+                  console.log('⚠️ Tab clicked but value unchanged, forcing update...');
+                  // Force update even if value is the same
+                  handleTabChange(e, newValue);
+                }
+              }}
               aria-label="vendor dashboard tabs"
+              variant="scrollable"
+              scrollButtons="auto"
+              allowScrollButtonsMobile
+              sx={{ 
+                '& .MuiTab-root': {
+                  pointerEvents: 'auto !important',
+                  cursor: 'pointer !important',
+                  minHeight: '48px',
+                  userSelect: 'none',
+                },
+                '& .MuiTabs-indicator': {
+                  backgroundColor: 'primary.main',
+                },
+                '& .MuiTab-root.Mui-selected': {
+                  color: 'primary.main',
+                }
+              }}
             >
               <Tab label="Overview" />
               {isTentBusiness(selectedBusiness) && <Tab label="Theme" />}
+              {isTentBusiness(selectedBusiness) && <Tab label="Inventory" />}
               {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory !== 'caters' && <Tab label="Themes" />}
               {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory !== 'caters' && <Tab label="Inventory" />}
               {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && <Tab label="Plate" />}
               {!isTentBusiness(selectedBusiness) && selectedBusiness.businessCategory === 'caters' && <Tab label="Dish" />}
               {!isTentBusiness(selectedBusiness) && (
-                <Tab 
-                  label={
-                    unreadNotificationCount > 0 
-                      ? `Orders & Notifications (${unreadNotificationCount})` 
-                      : "Orders & Notifications"
-                  }
-                  data-tab-index={getOrdersTabIndex()}
-                />
+                <>
+                  <Tab 
+                    label="Orders"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log('🟡 Orders Tab onClick fired directly!');
+                      console.log('🟡 Current activeTab:', activeTab);
+                      console.log('🟡 selectedBusiness:', selectedBusiness?.businessName);
+                      console.log('🟡 isTentBusiness:', isTentBusiness(selectedBusiness));
+                      // Manually trigger tab change
+                      const ordersTabIndex = selectedBusiness?.businessCategory === 'caters' ? 3 : 3;
+                      console.log('🟡 Setting activeTab to:', ordersTabIndex);
+                      setActiveTab(ordersTabIndex);
+                      fetchOrdersForBusiness();
+                    }}
+                  />
+                  <Tab 
+                    label={
+                      unreadNotificationCount > 0 
+                        ? `Notifications (${unreadNotificationCount})` 
+                        : "Notifications"
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log('🟡 Notifications Tab onClick fired directly!');
+                      console.log('🟡 Current activeTab:', activeTab);
+                      console.log('🟡 selectedBusiness:', selectedBusiness?.businessName);
+                      console.log('🟡 isTentBusiness:', isTentBusiness(selectedBusiness));
+                      // Manually trigger tab change
+                      const notificationsTabIndex = selectedBusiness?.businessCategory === 'caters' ? 4 : 4;
+                      console.log('🟡 Setting activeTab to:', notificationsTabIndex);
+                      setActiveTab(notificationsTabIndex);
+                      fetchNotificationCount();
+                      fetchVendorNotifications();
+                    }}
+                  />
+                </>
               )}
-              {isTentBusiness(selectedBusiness) && (
-                <Tab label="Explore" />
+              {(isTentBusiness(selectedBusiness) || selectedBusiness.businessCategory === 'caters') && (
+                <Tab 
+                  label="Explore"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    console.log('🟡 Explore Tab onClick fired directly!');
+                    console.log('🟡 Current activeTab:', activeTab);
+                    console.log('🟡 selectedBusiness:', selectedBusiness?.businessName);
+                    console.log('🟡 Navigating to /explore immediately...');
+                    // Navigate immediately without updating state
+                    navigate('/explore');
+                  }}
+                />
               )}
             </Tabs>
           </Box>
@@ -1103,6 +1250,18 @@ const VendorDashboard: React.FC = () => {
                       </Typography>
                     </Box>
                   </Box>
+
+                  <Box display="flex" alignItems="center" mb={2}>
+                    <InventoryIcon sx={{ fontSize: 24, color: 'warning.main', mr: 1 }} />
+                    <Box>
+                      <Typography variant="h4" component="div">
+                        {inventory.length}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Total Inventory
+                      </Typography>
+                    </Box>
+                  </Box>
                 </>
               )}
 
@@ -1121,6 +1280,55 @@ const VendorDashboard: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+          {/* Quick Access Section for Catering Vendors - Orders & Notifications */}
+          {selectedBusiness && selectedBusiness.businessCategory === 'caters' && (
+            <Box sx={{ mt: 4 }}>
+              <Card sx={{ bgcolor: 'primary.light', color: 'primary.contrastText' }}>
+                <CardContent>
+                  <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
+                    <Box display="flex" alignItems="center" gap={2}>
+                      <NotificationIcon sx={{ fontSize: 40 }} />
+                      <Box>
+                        <Typography variant="h6" gutterBottom>
+                          Orders & Notifications
+                        </Typography>
+                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                          {unreadNotificationCount > 0 
+                            ? `${unreadNotificationCount} unread notifications`
+                            : 'View and manage your orders and notifications'
+                          }
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      size="large"
+                      startIcon={<NotificationIcon />}
+                      onClick={() => setActiveTab(3)}
+                      sx={{ 
+                        minWidth: 200,
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      View Orders
+                    </Button>
+                  </Box>
+                  {unreadNotificationCount > 0 && (
+                    <Box mt={2}>
+                      <Chip 
+                        label={`${unreadNotificationCount} New Notifications`} 
+                        color="error" 
+                        size="medium"
+                        sx={{ fontWeight: 'bold' }}
+                      />
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Box>
+          )}
 
           {/* Themes Section - Only show for non-catering businesses (including tent) */}
           {(isTentBusiness(selectedBusiness) || selectedBusiness.businessCategory !== 'caters') && (
@@ -1167,6 +1375,51 @@ const VendorDashboard: React.FC = () => {
                           setActiveTab(1);
                         }}
                         showActions={true}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          )}
+
+          {/* Inventory Section - Only show for non-catering businesses (including tent) */}
+          {(isTentBusiness(selectedBusiness) || selectedBusiness.businessCategory !== 'caters') && (
+            <Box sx={{ mt: 4 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h5" gutterBottom>
+                  My Inventory ({inventory.length})
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => setInventoryFormOpen(true)}
+                >
+                  Add Inventory Item
+                </Button>
+              </Box>
+              
+              {inventory.length === 0 ? (
+                <Paper sx={{ p: 3, textAlign: 'center' }}>
+                  <BusinessIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No inventory items yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Start by adding your first inventory item to showcase what you offer.
+                  </Typography>
+                </Paper>
+              ) : (
+                <Grid container spacing={2}>
+                  {inventory.map((item) => (
+                    <Grid item xs={12} sm={6} md={4} key={item.inventoryId}>
+                      <InventoryCard
+                        inventory={item}
+                        onEdit={handleEditInventory}
+                        onDelete={handleDeleteInventory}
+                        onViewImages={handleViewInventoryImages}
+                        onPriceUpdate={handlePriceUpdate}
+                        showActions={true}
+                        refreshTrigger={inventoryRefreshTrigger}
                       />
                     </Grid>
                   ))}
@@ -1267,8 +1520,7 @@ const VendorDashboard: React.FC = () => {
           {/* Theme Tab - Show for tent businesses and non-catering businesses only */}
           {activeTab === 1 && selectedBusiness && 
             !isTentBusiness(selectedBusiness) && 
-            selectedBusiness.businessCategory !== 'caters' && 
-            getOrdersTabIndex() !== 1 && (
+            selectedBusiness.businessCategory !== 'caters' && (
             <ThemeManagement
               themes={themes}
               businessId={selectedBusiness.businessId}
@@ -1286,8 +1538,60 @@ const VendorDashboard: React.FC = () => {
             />
           )}
 
-          {/* Explore Tab - Only for tent businesses */}
-          {activeTab === 2 && isTentBusiness(selectedBusiness) && (
+          {/* Inventory Tab - Show for tent businesses */}
+          {activeTab === 2 && selectedBusiness && isTentBusiness(selectedBusiness) && (
+            <Box>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="h5" component="h2">
+                  Inventory Management
+                </Typography>
+                <Button
+                  variant="contained"
+                  onClick={() => setInventoryFormOpen(true)}
+                >
+                  Add Inventory Item
+                </Button>
+              </Box>
+
+              {inventory.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No inventory items yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    Start by adding your first inventory item to showcase what you offer.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    onClick={() => setInventoryFormOpen(true)}
+                  >
+                    Add First Inventory Item
+                  </Button>
+                </Paper>
+              ) : (
+                <Grid container spacing={3}>
+                  {inventory.map((item) => (
+                    <Grid item xs={12} sm={6} md={4} key={item.inventoryId}>
+                      <InventoryCard
+                        inventory={item}
+                        onEdit={handleEditInventory}
+                        onDelete={handleDeleteInventory}
+                        onViewImages={handleViewInventoryImages}
+                        onPriceUpdate={handlePriceUpdate}
+                        showActions={true}
+                        refreshTrigger={inventoryRefreshTrigger}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </Box>
+          )}
+
+          {/* Explore Tab - For tent businesses and catering businesses */}
+          {/* Only show Explore content if activeTab matches Explore tab index (3 for tent, 5 for caters) */}
+          {((isTentBusiness(selectedBusiness) && activeTab === 3) || 
+            (selectedBusiness.businessCategory === 'caters' && activeTab === 5)) && (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="h5" gutterBottom>
                 Explore Marketplace
@@ -1451,166 +1755,35 @@ const VendorDashboard: React.FC = () => {
             </Box>
           )}
 
-          {/* Orders & Notifications Tab - Rebuilt from scratch */}
-          {/* For non-catering: tab index 3 (Overview=0, Themes=1, Inventory=2, Orders=3) */}
-          {/* For catering: tab index 3 (Overview=0, Plate=1, Dish=2, Orders=3) */}
-          {selectedBusiness && !isTentBusiness(selectedBusiness) && (
-            (selectedBusiness.businessCategory === 'caters' && activeTab === 3) ||
-            (selectedBusiness.businessCategory !== 'caters' && activeTab === 3)
-          ) && (
+          {/* Orders Tab */}
+          {/* For non-catering: tab index 3 (Overview=0, Themes=1, Inventory=2, Orders=3, Notifications=4) */}
+          {/* For catering: tab index 3 (Overview=0, Plate=1, Dish=2, Orders=3, Notifications=4, Explore=5) */}
+          {/* Orders Tab - Only Orders */}
+          {/* Only show Orders content if activeTab is exactly 3 (Orders tab index) */}
+          {selectedBusiness && !isTentBusiness(selectedBusiness) && activeTab === 3 && (
             <Box sx={{ width: '100%', p: 2 }}>
               <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
-                Orders & Notifications
+                Orders for {selectedBusiness.businessName}
               </Typography>
               
-              {/* Notifications Section - Show First */}
-              <Box sx={{ mb: 4 }}>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h5" component="h2">
-                    Notifications
-                    {unreadNotificationCount > 0 && (
-                      <Chip 
-                        label={`${unreadNotificationCount} Unread`} 
-                        color="error" 
-                        size="small" 
-                        sx={{ ml: 2 }}
-                      />
-                    )}
-                  </Typography>
-                  <Box display="flex" gap={1}>
-                    <Button 
-                      variant="outlined" 
-                      size="small"
-                      onClick={fetchVendorNotifications}
-                      disabled={loadingNotifications}
-                    >
-                      Refresh
-                    </Button>
-                    {unreadNotificationCount > 0 && (
-                      <Button 
-                        variant="contained" 
-                        size="small"
-                        color="primary"
-                        onClick={async () => {
-                          if (user?.phoneNumber) {
-                            try {
-                              await notificationService.markAllAsRead(user.phoneNumber);
-                              fetchNotificationCount();
-                              fetchVendorNotifications();
-                            } catch (err) {
-                              console.error('Error marking all notifications as read:', err);
-                            }
-                          }
-                        }}
-                      >
-                        Mark All Read
-                      </Button>
-                    )}
-                  </Box>
-                </Box>
-                
-                {loadingNotifications ? (
-                  <Box display="flex" justifyContent="center" alignItems="center" minHeight="100px">
-                    <CircularProgress />
-                  </Box>
-                ) : vendorNotifications.length === 0 ? (
-                  <Paper sx={{ p: 3, textAlign: 'center' }}>
-                    <NotificationIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-                    <Typography variant="body1" color="text.secondary">
-                      No notifications yet
-                    </Typography>
-                  </Paper>
-                ) : (
-                  <Box>
-                    {vendorNotifications.map((notification) => (
-                      <Card 
-                        key={notification.notificationId} 
-                        sx={{ 
-                          mb: 2,
-                          borderLeft: !notification.isRead ? '4px solid #1976d2' : 'none',
-                          bgcolor: !notification.isRead ? 'action.hover' : 'inherit',
-                          cursor: 'pointer',
-                          '&:hover': {
-                            boxShadow: 2,
-                          }
-                        }}
-                        onClick={() => {
-                          if (!notification.isRead) {
-                            handleMarkNotificationAsRead(notification.notificationId);
-                          }
-                        }}
-                      >
-                        <CardContent>
-                          <Box display="flex" justifyContent="space-between" alignItems="flex-start">
-                            <Box flex={1}>
-                              <Box display="flex" alignItems="center" gap={1} mb={1}>
-                                <NotificationIcon 
-                                  sx={{ 
-                                    fontSize: 20, 
-                                    color: notification.isRead ? 'text.secondary' : 'primary.main' 
-                                  }} 
-                                />
-                                <Typography 
-                                  variant="body1" 
-                                  sx={{ fontWeight: notification.isRead ? 'normal' : 'bold' }}
-                                >
-                                  {notification.message}
-                                </Typography>
-                                {!notification.isRead && (
-                                  <Chip label="New" color="primary" size="small" />
-                                )}
-                              </Box>
-                              <Typography variant="caption" color="text.secondary" display="block">
-                                {new Date(notification.createdAt).toLocaleString()}
-                              </Typography>
-                              {notification.orderId && (
-                                <Typography variant="caption" color="text.secondary" display="block">
-                                  {notification.businessName}
-                                </Typography>
-                              )}
-                            </Box>
-                            {!notification.isRead && (
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMarkNotificationAsRead(notification.notificationId);
-                                }}
-                              >
-                                Mark Read
-                              </Button>
-                            )}
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </Box>
-                )}
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="body1" color="text.secondary">
+                  Manage and track all orders from your customers
+                </Typography>
+                <Button 
+                  variant="outlined" 
+                  onClick={fetchOrdersForBusiness}
+                  disabled={ordersLoading}
+                >
+                  Refresh Orders
+                </Button>
               </Box>
 
-              <Divider sx={{ my: 3 }} />
-
-              {/* Orders Section */}
-              <Box>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                  <Typography variant="h5" component="h2">
-                    Orders for {selectedBusiness.businessName}
-                  </Typography>
-                  <Button 
-                    variant="outlined" 
-                    onClick={fetchOrdersForBusiness}
-                    disabled={ordersLoading}
-                  >
-                    Refresh Orders
-                  </Button>
-                </Box>
-
-                {ordersError && (
-                  <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError(null)}>
-                    {ordersError}
-                  </Alert>
-                )}
+              {ordersError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError(null)}>
+                  {ordersError}
+                </Alert>
+              )}
 
               {ordersLoading ? (
                 <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
@@ -1774,7 +1947,137 @@ const VendorDashboard: React.FC = () => {
                   ))}
                 </Grid>
               )}
+            </Box>
+          )}
+
+          {/* Notifications Tab - Only Notifications */}
+          {/* Only show Notifications content if activeTab is exactly 4 (Notifications tab index) */}
+          {selectedBusiness && !isTentBusiness(selectedBusiness) && activeTab === 4 && (
+            <Box sx={{ width: '100%', p: 2 }}>
+              <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
+                Notifications
+              </Typography>
+              
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Typography variant="body1" color="text.secondary">
+                  {unreadNotificationCount > 0 
+                    ? `${unreadNotificationCount} unread notifications`
+                    : 'View and manage your notifications'
+                  }
+                </Typography>
+                <Box display="flex" gap={1}>
+                  <Button 
+                    variant="outlined" 
+                    size="small"
+                    onClick={fetchVendorNotifications}
+                    disabled={loadingNotifications}
+                  >
+                    Refresh
+                  </Button>
+                  {unreadNotificationCount > 0 && (
+                    <Button 
+                      variant="contained" 
+                      size="small"
+                      color="primary"
+                      onClick={async () => {
+                        if (user?.phoneNumber) {
+                          try {
+                            await notificationService.markAllAsRead(user.phoneNumber);
+                            fetchNotificationCount();
+                            fetchVendorNotifications();
+                          } catch (err) {
+                            console.error('Error marking all notifications as read:', err);
+                          }
+                        }
+                      }}
+                    >
+                      Mark All Read
+                    </Button>
+                  )}
+                </Box>
               </Box>
+              
+              {loadingNotifications ? (
+                <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                  <CircularProgress />
+                </Box>
+              ) : vendorNotifications.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                  <NotificationIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary" gutterBottom>
+                    No notifications yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    You'll receive notifications here when customers place orders or when there are updates.
+                  </Typography>
+                </Paper>
+              ) : (
+                <Box>
+                  {vendorNotifications.map((notification) => (
+                    <Card 
+                      key={notification.notificationId} 
+                      sx={{ 
+                        mb: 2,
+                        borderLeft: !notification.isRead ? '4px solid #1976d2' : 'none',
+                        bgcolor: !notification.isRead ? 'action.hover' : 'inherit',
+                        cursor: 'pointer',
+                        '&:hover': {
+                          boxShadow: 2,
+                        }
+                      }}
+                      onClick={() => {
+                        if (!notification.isRead) {
+                          handleMarkNotificationAsRead(notification.notificationId);
+                        }
+                      }}
+                    >
+                      <CardContent>
+                        <Box display="flex" justifyContent="space-between" alignItems="flex-start">
+                          <Box flex={1}>
+                            <Box display="flex" alignItems="center" gap={1} mb={1}>
+                              <NotificationIcon 
+                                sx={{ 
+                                  fontSize: 20, 
+                                  color: notification.isRead ? 'text.secondary' : 'primary.main' 
+                                }} 
+                              />
+                              <Typography 
+                                variant="body1" 
+                                sx={{ fontWeight: notification.isRead ? 'normal' : 'bold' }}
+                              >
+                                {notification.message}
+                              </Typography>
+                              {!notification.isRead && (
+                                <Chip label="New" color="primary" size="small" />
+                              )}
+                            </Box>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              {new Date(notification.createdAt).toLocaleString()}
+                            </Typography>
+                            {notification.orderId && (
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {notification.businessName}
+                              </Typography>
+                            )}
+                          </Box>
+                          {!notification.isRead && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkNotificationAsRead(notification.notificationId);
+                              }}
+                            >
+                              Mark Read
+                            </Button>
+                          )}
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+              )}
             </Box>
           )}
 

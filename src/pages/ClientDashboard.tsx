@@ -342,7 +342,14 @@ const ClientDashboard: React.FC = () => {
             <Grid container spacing={3}>
               {ordersArray.map((order) => (
                 <Grid item xs={12} key={order.orderId}>
-                  <OrderStatusTracker order={order} showDetails={false} />
+                  <OrderStatusTracker 
+                    order={order} 
+                    showDetails={false}
+                    onCancel={() => {
+                      fetchOrders();
+                      refreshNotifications();
+                    }}
+                  />
                 </Grid>
               ))}
             </Grid>

@@ -15,11 +15,16 @@ import {
   Alert,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import { Vendor } from '../types';
+import { Vendor, Business } from '../types';
 import VendorService from '../services/vendorService';
+import BusinessService from '../services/businessService';
+
+interface VendorWithCategory extends Vendor {
+  categories?: string[];
+}
 
 const VendorManagement: React.FC = () => {
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [vendors, setVendors] = useState<VendorWithCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,8 +35,23 @@ const VendorManagement: React.FC = () => {
   const fetchVendors = async () => {
     try {
       setLoading(true);
-      const data = await VendorService.getAllVendors();
-      setVendors(data);
+      const vendorsData = await VendorService.getAllVendors();
+      
+      // Fetch business categories for each vendor
+      const vendorsWithCategories = await Promise.all(
+        vendorsData.map(async (vendor) => {
+          try {
+            const businesses = await BusinessService.getBusinessesByVendorPhoneNumber(vendor.phoneNumber);
+            const categories = businesses.map(b => b.businessCategory).filter(Boolean);
+            return { ...vendor, categories };
+          } catch (err) {
+            console.error(`Error fetching businesses for vendor ${vendor.phoneNumber}:`, err);
+            return { ...vendor, categories: [] };
+          }
+        })
+      );
+      
+      setVendors(vendorsWithCategories);
     } catch (err) {
       setError('Failed to fetch vendors');
       console.error('Error fetching vendors:', err);
@@ -72,6 +92,7 @@ const VendorManagement: React.FC = () => {
               <TableCell>Business Name</TableCell>
               <TableCell>Phone</TableCell>
               <TableCell>Email</TableCell>
+              <TableCell>Category</TableCell>
               <TableCell>Verified</TableCell>
               <TableCell>Created</TableCell>
             </TableRow>
@@ -82,6 +103,25 @@ const VendorManagement: React.FC = () => {
                 <TableCell>{vendor.businessName}</TableCell>
                 <TableCell>{vendor.phoneNumber}</TableCell>
                 <TableCell>{vendor.businessEmail}</TableCell>
+                <TableCell>
+                  {vendor.categories && vendor.categories.length > 0 ? (
+                    <Box display="flex" gap={0.5} flexWrap="wrap">
+                      {vendor.categories.map((category, index) => (
+                        <Chip
+                          key={index}
+                          label={category}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      ))}
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No category
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Chip
                     label={vendor.isVerified ? 'Verified' : 'Pending'}

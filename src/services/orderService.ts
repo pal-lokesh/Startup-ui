@@ -11,96 +11,156 @@ class OrderService {
     };
   }
 
-  async createOrder(cartItems: CartItem[], orderData: OrderFormData, userId: string): Promise<Order> {
+  async createOrder(cartItems: CartItem[], orderData: OrderFormData, userId: string): Promise<Order[]> {
     try {
-      // Transform cart items to match backend API structure
-      const orderItems = cartItems.map(item => {
-        const orderItem: any = {
-          itemId: item.id,
-          itemName: item.name,
-          itemPrice: item.price,
-          quantity: item.quantity,
-          itemType: item.type,
-          businessId: item.businessId,
-          businessName: item.businessName,
-          imageUrl: item.imageUrl || item.image,
+      // Group cart items by businessId (vendor)
+      const itemsByVendor = new Map<string, CartItem[]>();
+      
+      cartItems.forEach(item => {
+        const businessId = item.businessId;
+        if (!itemsByVendor.has(businessId)) {
+          itemsByVendor.set(businessId, []);
+        }
+        itemsByVendor.get(businessId)!.push(item);
+      });
+
+      console.log(`Creating ${itemsByVendor.size} order(s) for ${cartItems.length} item(s) grouped by vendor`);
+
+      // Create an order for each vendor
+      const orderPromises: Promise<Order>[] = [];
+      const vendorNames: string[] = [];
+
+      itemsByVendor.forEach((vendorItems, businessId) => {
+        const businessName = vendorItems[0].businessName;
+        vendorNames.push(businessName);
+
+        // Transform cart items to match backend API structure
+        const orderItems = vendorItems.map(item => {
+          const orderItem: any = {
+            itemId: item.id,
+            itemName: item.name,
+            itemPrice: item.price,
+            quantity: item.quantity,
+            itemType: item.type,
+            businessId: item.businessId,
+            businessName: item.businessName,
+            imageUrl: item.imageUrl || item.image,
+          };
+          
+          // Only include bookingDate if it's provided and not empty
+          if (item.bookingDate && item.bookingDate.trim() !== '') {
+            orderItem.bookingDate = item.bookingDate;
+          }
+          
+          // Include selected dishes for plates
+          if (item.type === 'plate' && item.selectedDishes && item.selectedDishes.length > 0) {
+            orderItem.selectedDishes = JSON.stringify(item.selectedDishes);
+          }
+          
+          return orderItem;
+        });
+
+        const orderPayload = {
+          userId: userId,
+          customerName: orderData.customerName,
+          customerEmail: orderData.customerEmail,
+          customerPhone: orderData.customerPhone,
+          deliveryAddress: orderData.deliveryAddress,
+          deliveryDate: orderData.deliveryDate,
+          specialNotes: orderData.specialNotes || '',
+          items: orderItems
         };
-        
-        // Only include bookingDate if it's provided and not empty
-        if (item.bookingDate && item.bookingDate.trim() !== '') {
-          orderItem.bookingDate = item.bookingDate;
-        }
-        
-        // Include selected dishes for plates
-        if (item.type === 'plate' && item.selectedDishes && item.selectedDishes.length > 0) {
-          orderItem.selectedDishes = JSON.stringify(item.selectedDishes);
-        }
-        
-        return orderItem;
-      });
 
-      const orderPayload = {
-        userId: userId,
-        customerName: orderData.customerName,
-        customerEmail: orderData.customerEmail,
-        customerPhone: orderData.customerPhone,
-        deliveryAddress: orderData.deliveryAddress,
-        deliveryDate: orderData.deliveryDate,
-        specialNotes: orderData.specialNotes || '',
-        items: orderItems
-      };
+        console.log(`Creating order for vendor: ${businessName} with ${orderItems.length} item(s)`);
 
-      console.log('Creating order with payload:', JSON.stringify(orderPayload, null, 2));
-
-      const response = await fetch(API_BASE_URL, {
-        method: 'POST',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(orderPayload),
-      });
-
-      if (!response.ok) {
-        // Try to parse error response
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        
-        // Clone the response so we can read it multiple times if needed
-        const responseClone = response.clone();
-        
-        try {
-          const errorData = await response.json();
-          console.log('Error response data:', errorData);
-          // Handle different error response formats
-          if (typeof errorData === 'string') {
-            errorMessage = errorData;
-          } else if (errorData.message) {
-            errorMessage = errorData.message;
-          } else if (errorData.error) {
-            errorMessage = errorData.error;
-          }
-        } catch (e) {
-          // If response is not JSON, try to get text from clone
-          try {
-            const errorText = await responseClone.text();
-            console.log('Error response text:', errorText);
-            if (errorText) {
-              errorMessage = errorText;
+        const orderPromise = fetch(API_BASE_URL, {
+          method: 'POST',
+          headers: this.getAuthHeaders(),
+          body: JSON.stringify(orderPayload),
+        }).then(async (response) => {
+          if (!response.ok) {
+            // Try to parse error response
+            let errorMessage = `HTTP error! status: ${response.status}`;
+            
+            // Clone the response so we can read it multiple times if needed
+            const responseClone = response.clone();
+            
+            try {
+              const errorData = await response.json();
+              console.log('Error response data:', errorData);
+              // Handle different error response formats
+              if (typeof errorData === 'string') {
+                errorMessage = errorData;
+              } else if (errorData.message) {
+                errorMessage = errorData.message;
+              } else if (errorData.error) {
+                errorMessage = errorData.error;
+              }
+            } catch (e) {
+              // If response is not JSON, try to get text from clone
+              try {
+                const errorText = await responseClone.text();
+                console.log('Error response text:', errorText);
+                if (errorText) {
+                  errorMessage = errorText;
+                }
+              } catch (textError) {
+                console.error('Error reading response text:', textError);
+                // Keep default error message
+              }
             }
-          } catch (textError) {
-            console.error('Error reading response text:', textError);
-            // Keep default error message
+            console.error(`Failed to create order for ${businessName}:`, errorMessage);
+            throw new Error(`Failed to create order for ${businessName}: ${errorMessage}`);
           }
-        }
-        console.error('Final error message:', errorMessage);
-        throw new Error(errorMessage);
-      }
 
-      return await response.json();
+          return await response.json();
+        });
+
+        orderPromises.push(orderPromise);
+      });
+
+      // Wait for all orders to be created
+      // Use Promise.allSettled to handle partial success scenarios
+      const results = await Promise.allSettled(orderPromises);
+      
+      const successfulOrders: Order[] = [];
+      const failedOrders: { vendor: string; error: string }[] = [];
+      
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          successfulOrders.push(result.value);
+        } else {
+          const vendorName = vendorNames[index] || 'Unknown';
+          const errorMessage = result.reason?.message || 'Unknown error';
+          failedOrders.push({ vendor: vendorName, error: errorMessage });
+          console.error(`Failed to create order for ${vendorName}:`, errorMessage);
+        }
+      });
+      
+      // If all orders failed, throw an error
+      if (successfulOrders.length === 0) {
+        const errorMessages = failedOrders.map(f => `${f.vendor}: ${f.error}`).join('; ');
+        throw new Error(`Failed to create any orders: ${errorMessages}`);
+      }
+      
+      // If some orders succeeded, log warnings for failed ones but return successful orders
+      if (failedOrders.length > 0) {
+        console.warn(`Partially successful: ${successfulOrders.length} order(s) created, ${failedOrders.length} failed`);
+        failedOrders.forEach(f => {
+          console.warn(`  - ${f.vendor}: ${f.error}`);
+        });
+      }
+      
+      console.log(`Successfully created ${successfulOrders.length} order(s) for vendor(s): ${successfulOrders.map((o, i) => vendorNames[i]).filter(Boolean).join(', ')}`);
+      
+      return successfulOrders;
     } catch (error: any) {
-      console.error('Error creating order:', error);
+      console.error('Error creating orders:', error);
       // Re-throw with proper error message
       if (error instanceof Error) {
         throw error;
       }
-      throw new Error(error.message || 'Failed to create order');
+      throw new Error(error.message || 'Failed to create orders');
     }
   }
 

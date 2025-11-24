@@ -15,6 +15,7 @@ import {
   Grid,
   Paper,
   Divider,
+  Button,
 } from '@mui/material';
 import {
   ShoppingCart as ShoppingCartIcon,
@@ -30,16 +31,42 @@ import {
 } from '@mui/icons-material';
 import { Order } from '../types/cart';
 import { getOrderDisplayTitle } from '../utils/orderDisplay';
+import { useAuth } from '../contexts/AuthContext';
+import orderService from '../services/orderService';
 
 interface OrderStatusTrackerProps {
   order: Order;
   showDetails?: boolean;
+  onCancel?: () => void;
 }
 
 const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
   order,
   showDetails = true,
+  onCancel,
 }) => {
+  const { user } = useAuth();
+  const [cancellingOrderId, setCancellingOrderId] = React.useState<string | null>(null);
+
+  const handleCancelOrder = async () => {
+    if (!window.confirm('Are you sure you want to cancel this order? This action cannot be undone.')) {
+      return;
+    }
+
+    setCancellingOrderId(order.orderId.toString());
+    try {
+      await orderService.cancelOrder(order.orderId.toString());
+      // Call onCancel callback if provided
+      if (onCancel) {
+        onCancel();
+      }
+    } catch (error: any) {
+      console.error('Error cancelling order:', error);
+      alert(`Failed to cancel order: ${error.message || 'Unknown error'}`);
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PENDING': return 'warning';
@@ -202,11 +229,28 @@ const OrderStatusTracker: React.FC<OrderStatusTrackerProps> = ({
                 </Typography>
               </Box>
             </Box>
-            <Chip 
-              label={order.status} 
-              color={getStatusColor(order.status) as any}
-              icon={getStatusIcon(order.status)}
-            />
+            <Box display="flex" flexDirection="column" alignItems="flex-end" gap={1}>
+              <Chip 
+                label={order.status} 
+                color={getStatusColor(order.status) as any}
+                icon={getStatusIcon(order.status)}
+              />
+              {user?.userType === 'CLIENT' && 
+               order.status !== 'DELIVERED' && 
+               order.status !== 'CANCELLED' && 
+               order.status !== 'READY' && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  startIcon={<CancelIcon />}
+                  onClick={handleCancelOrder}
+                  disabled={cancellingOrderId === order.orderId.toString()}
+                >
+                  {cancellingOrderId === order.orderId.toString() ? 'Cancelling...' : 'Cancel Order'}
+                </Button>
+              )}
+            </Box>
           </Box>
 
           <Alert severity={statusMessage.severity} sx={{ mb: 2 }}>

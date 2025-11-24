@@ -87,16 +87,30 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
   };
 
   const handleDateConfirm = (date: string | undefined) => {
+    console.log('🎨 ThemeCard handleDateConfirm called - ADDING TO CART ONLY');
+    console.log('🎨 pendingCartAction:', pendingCartAction);
+    console.log('🎨 date:', date);
+    
     if (business && pendingCartAction) {
-      // Add to cart with selected date
-      addToCart(theme, business, date);
+      // IMPORTANT: This only adds to cart, it does NOT place an order
+      console.log('🎨 Adding theme to cart (NOT placing order)');
       
-      if (pendingCartAction === 'buyNow') {
-        // Open cart drawer
-        openCart();
+      // CRITICAL: Only add to cart - NEVER place order from here
+      if (pendingCartAction === 'add') {
+        console.log('🎨 Add to Cart action - adding to cart ONLY, NO order placement');
+        // Add to cart with selected date
+        addToCart(theme, business, date);
+        console.log('🎨 Item added to cart successfully');
+        console.log('🎨 Add to Cart complete - NO order placed, NO navigation');
+      } else if (pendingCartAction === 'buyNow') {
+        // For Buy Now, still just add to cart
+        // The onBuyNow callback should NOT place orders automatically
+        console.log('🎨 Buy Now action - adding to cart, then calling onBuyNow callback');
+        addToCart(theme, business, date);
         
-        // Call parent's onBuyNow if provided
+        // Call parent's onBuyNow if provided (should NOT place order, just navigate or show message)
         if (onBuyNow) {
+          console.log('🎨 Calling onBuyNow callback - this should NOT place order');
           onBuyNow(theme, business);
         }
       }
@@ -318,56 +332,27 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
       
       {/* Actions Section */}
       <Box sx={{ p: 2, pt: 0 }}>
-        {/* Cart and Buy Now Buttons - Always show, date picker will handle availability */}
-        {business && (showCartButton || showBuyNowButton) && (
+        {/* Cart Button - Only show Add to Cart for clients, no Buy Now */}
+        {business && showCartButton && user?.userType === 'CLIENT' && (
           <Box sx={{ mb: 2 }}>
-            <Box 
-              display="flex" 
-              gap={{ xs: 0.5, sm: 1 }} 
-              flexDirection={{ xs: 'column', sm: 'row' }}
-              sx={{ width: '100%' }}
+            <Button
+              variant={isInCart(theme.themeId, 'theme') ? "contained" : "outlined"}
+              color={isInCart(theme.themeId, 'theme') ? "success" : "primary"}
+              size="small"
+              startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
+              onClick={handleCartToggle}
+              fullWidth
+              sx={{
+                fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
+                padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
+                minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
+                whiteSpace: 'nowrap',
+                textOverflow: 'ellipsis',
+                overflow: 'hidden'
+              }}
             >
-              {showCartButton && (
-                <Button
-                  variant={isInCart(theme.themeId, 'theme') ? "contained" : "outlined"}
-                  color={isInCart(theme.themeId, 'theme') ? "success" : "primary"}
-                  size="small"
-                  startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
-                  onClick={handleCartToggle}
-                  fullWidth
-                  sx={{
-                    fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
-                    padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
-                    minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {isInCart(theme.themeId, 'theme') ? "In Cart" : "Add to Cart"}
-                </Button>
-              )}
-              {showBuyNowButton && (
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="small"
-                  startIcon={<BuyNowIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
-                  onClick={handleBuyNow}
-                  fullWidth
-                  sx={{
-                    fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
-                    padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
-                    minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden'
-                  }}
-                >
-                  Buy Now
-                </Button>
-              )}
-            </Box>
+              {isInCart(theme.themeId, 'theme') ? "In Cart" : "Add to Cart"}
+            </Button>
           </Box>
         )}
 

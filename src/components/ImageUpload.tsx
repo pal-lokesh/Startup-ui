@@ -114,17 +114,33 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         formData.append('category', uploadType === 'inventory' ? 'inventory' : 'themes');
         formData.append('itemId', themeId);
 
+        // Get authentication token
+        const token = localStorage.getItem('token');
+        const headers: HeadersInit = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
         // Upload file to backend
         const uploadResponse = await fetch('http://localhost:8080/api/files/upload', {
           method: 'POST',
+          headers: headers,
           body: formData,
         });
 
-        if (!uploadResponse.ok) {
-          throw new Error('File upload failed');
+        let uploadResult;
+        try {
+          uploadResult = await uploadResponse.json();
+        } catch (parseError) {
+          // If JSON parsing fails, throw a generic error
+          throw new Error(`File upload failed: ${uploadResponse.status} ${uploadResponse.statusText}`);
         }
 
-        const uploadResult = await uploadResponse.json();
+        if (!uploadResponse.ok || !uploadResult.success) {
+          const errorMessage = uploadResult.message || `File upload failed: ${uploadResponse.status}`;
+          console.error('Upload error response:', uploadResult);
+          throw new Error(errorMessage);
+        }
         
         if (uploadType === 'inventory') {
           const imageData = {
@@ -181,16 +197,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       }
     } catch (err: any) {
       console.error('Upload error:', err);
-      if (err.response) {
-        // Server responded with error status
-        setError(`Upload failed: ${err.response.status} - ${err.response.data?.message || err.response.statusText}`);
-      } else if (err.request) {
-        // Request was made but no response received
-        setError('Upload failed: No response from server. Please check your connection.');
-      } else {
-        // Something else happened
-        setError(`Upload failed: ${err.message}`);
-      }
+      // err.message should now contain the actual error message from backend
+      const errorMessage = err.message || 'File upload failed. Please try again.';
+      setError(`Upload failed: ${errorMessage}`);
     } finally {
       setUploading(false);
     }

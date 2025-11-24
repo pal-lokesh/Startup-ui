@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -68,6 +68,7 @@ const PlateCard: React.FC<PlateCardProps> = ({
   const [dishSelectorOpen, setDishSelectorOpen] = useState(false);
   const [pendingCartAction, setPendingCartAction] = useState<'add' | 'buyNow' | null>(null);
   const [pendingBookingDate, setPendingBookingDate] = useState<string | undefined>(undefined);
+  const openingDishSelectorRef = useRef(false); // Track if we're about to open dish selector
   const { addToCart, isInCart, removeFromCart, openCart } = useCart();
   const { user } = useAuth();
   
@@ -103,15 +104,50 @@ const PlateCard: React.FC<PlateCardProps> = ({
     return `http://localhost:8080/uploads/plates/${imagePath}`;
   };
 
-  const handleCartToggle = () => {
-    if (business) {
-      if (isInCart(plate.plateId, 'plate')) {
+  const handleCartToggle = (event?: React.MouseEvent) => {
+    console.log('🍽️ PlateCard handleCartToggle called');
+    console.log('🍽️ event:', event);
+    console.log('🍽️ business:', business);
+    console.log('🍽️ plate:', plate);
+    console.log('🍽️ plate.plateId:', plate?.plateId);
+    console.log('🍽️ isInCart function:', typeof isInCart);
+    
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    try {
+      if (!business) {
+        console.error('🍽️ ERROR: No business provided to handleCartToggle');
+        alert('Error: Business information is missing. Cannot add to cart.');
+        return;
+      }
+      
+      if (!plate || !plate.plateId) {
+        console.error('🍽️ ERROR: Plate or plateId is missing');
+        alert('Error: Plate information is missing. Cannot add to cart.');
+        return;
+      }
+      
+      const inCart = isInCart(plate.plateId, 'plate');
+      console.log('🍽️ isInCart result:', inCart);
+      
+      if (inCart) {
+        console.log('🍽️ Item already in cart, removing');
         removeFromCart(plate.plateId, 'plate');
       } else {
+        console.log('🍽️ Item not in cart, opening date picker');
         // Open date picker first
         setPendingCartAction('add');
+        console.log('🍽️ Set pendingCartAction to "add"');
         setDatePickerOpen(true);
+        console.log('🍽️ Set datePickerOpen to true');
+        console.log('🍽️ Date picker should now be open');
       }
+    } catch (error) {
+      console.error('🍽️ ERROR in handleCartToggle:', error);
+      alert('Error adding item to cart. Please try again.');
     }
   };
 
@@ -125,47 +161,108 @@ const PlateCard: React.FC<PlateCardProps> = ({
   };
 
   const handleDateConfirm = (date: string | undefined) => {
-    if (business && pendingCartAction) {
-      // Store the booking date
-      setPendingBookingDate(date);
-      setDatePickerOpen(false);
-      
-      // Only open dish selector for catering businesses
-      if (business.businessCategory === 'caters') {
-        setDishSelectorOpen(true);
-      } else {
-        // For non-catering businesses, add directly to cart without dishes
-        addToCart(plate, business, date);
-        if (pendingCartAction === 'buyNow') {
-          openCart();
-          if (onBuyNow) {
-            onBuyNow(plate, business);
-          }
-        }
-        setPendingCartAction(null);
-        setPendingBookingDate(undefined);
-      }
+    console.log('🍽️ PlateCard handleDateConfirm called');
+    console.log('🍽️ date:', date);
+    console.log('🍽️ business:', business);
+    console.log('🍽️ pendingCartAction:', pendingCartAction);
+    console.log('🍽️ business?.businessCategory:', business?.businessCategory);
+    
+    if (!business) {
+      console.error('🍽️ ERROR: No business provided to handleDateConfirm');
+      return;
     }
-  };
-
-  const handleDishSelectorConfirm = (selectedDishes: Array<{ dishId: string; dishName: string; dishPrice: number; quantity: number }>) => {
-    if (business && pendingCartAction) {
-      // Add to cart with selected date and dishes
-      addToCart(plate, business, pendingBookingDate, selectedDishes);
+    
+    if (!pendingCartAction) {
+      console.error('🍽️ ERROR: No pendingCartAction set');
+      return;
+    }
+    
+    // Store the booking date
+    setPendingBookingDate(date);
+    
+    // Only open dish selector for catering businesses
+    if (business.businessCategory === 'caters') {
+      console.log('🍽️ Opening dish selector for catering business');
+      console.log('🍽️ Keeping pendingCartAction:', pendingCartAction);
+      // Set ref to indicate we're opening dish selector
+      openingDishSelectorRef.current = true;
+      // Don't reset pendingCartAction - dish selector needs it
+      // Close date picker first, then open dish selector
+      setDatePickerOpen(false);
+      // Use setTimeout to ensure state updates happen in order
+      setTimeout(() => {
+        setDishSelectorOpen(true);
+        openingDishSelectorRef.current = false; // Reset after opening
+      }, 0);
+    } else {
+      // For non-catering businesses, add directly to cart without dishes
+      console.log('🍽️ Adding plate to cart directly (non-catering)');
+      console.log('🍽️ Plate:', plate);
+      console.log('🍽️ Business:', business);
+      console.log('🍽️ Date:', date);
+      console.log('🍽️ About to call addToCart with:', { plate, business, date });
+      
+      try {
+        addToCart(plate, business, date);
+        console.log('🍽️ Successfully called addToCart');
+      } catch (error) {
+        console.error('🍽️ ERROR calling addToCart:', error);
+      }
       
       if (pendingCartAction === 'buyNow') {
-        // Open cart drawer
-        openCart();
-        
-        // Call parent's onBuyNow if provided
         if (onBuyNow) {
           onBuyNow(plate, business);
         }
       }
+      setPendingCartAction(null);
+      setPendingBookingDate(undefined);
     }
+  };
+
+  const handleDishSelectorConfirm = (selectedDishes: Array<{ dishId: string; dishName: string; dishPrice: number; quantity: number }>) => {
+    console.log('🍽️ PlateCard handleDishSelectorConfirm called');
+    console.log('🍽️ business:', business);
+    console.log('🍽️ pendingCartAction:', pendingCartAction);
+    console.log('🍽️ pendingBookingDate:', pendingBookingDate);
+    console.log('🍽️ selectedDishes:', selectedDishes);
+    console.log('🍽️ plate:', plate);
+    
+    if (!business) {
+      console.error('🍽️ ERROR: No business provided to handleDishSelectorConfirm');
+      return;
+    }
+    
+    if (!pendingCartAction) {
+      console.error('🍽️ ERROR: No pendingCartAction set');
+      return;
+    }
+    
+    // Add to cart with selected date and dishes
+    console.log('🍽️ About to call addToCart with:', { 
+      plate, 
+      business, 
+      pendingBookingDate, 
+      selectedDishes 
+    });
+    
+    try {
+      addToCart(plate, business, pendingBookingDate, selectedDishes);
+      console.log('🍽️ Successfully called addToCart from handleDishSelectorConfirm');
+    } catch (error) {
+      console.error('🍽️ ERROR calling addToCart from handleDishSelectorConfirm:', error);
+    }
+    
+    if (pendingCartAction === 'buyNow') {
+      // Call parent's onBuyNow if provided
+      if (onBuyNow) {
+        onBuyNow(plate, business);
+      }
+    }
+    
     setDishSelectorOpen(false);
     setPendingCartAction(null);
     setPendingBookingDate(undefined);
+    console.log('🍽️ Reset state after dish selector confirm');
   };
 
   const handleDishSelectorCancel = () => {
@@ -418,56 +515,33 @@ const PlateCard: React.FC<PlateCardProps> = ({
             </Box>
           )}
           
-          {/* Cart and Buy Now Buttons - Always show, date picker will handle availability */}
-          {business && (showCartButton || showBuyNowButton) && (
+          {/* Cart Button - Only show Add to Cart for clients, no Buy Now */}
+          {business && showCartButton && user?.userType === 'CLIENT' && (
             <Box sx={{ mb: 2 }}>
-              <Box 
-                display="flex" 
-                gap={{ xs: 0.5, sm: 1 }} 
-                flexDirection={{ xs: 'column', sm: 'row' }}
-                sx={{ width: '100%' }}
+              <Button
+                variant={isInCart(plate.plateId, 'plate') ? "contained" : "outlined"}
+                color={isInCart(plate.plateId, 'plate') ? "success" : "primary"}
+                size="small"
+                startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
+                onClick={(e) => {
+                  console.log('🍽️ Button onClick triggered');
+                  handleCartToggle(e);
+                }}
+                disabled={!business || !plate || !plate.plateId}
+                fullWidth
+                sx={{
+                  fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
+                  padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
+                  minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  pointerEvents: 'auto',
+                  zIndex: 1
+                }}
               >
-                {showCartButton && (
-                  <Button
-                    variant={isInCart(plate.plateId, 'plate') ? "contained" : "outlined"}
-                    color={isInCart(plate.plateId, 'plate') ? "success" : "primary"}
-                    size="small"
-                    startIcon={<CartIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
-                    onClick={handleCartToggle}
-                    fullWidth
-                    sx={{
-                      fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
-                      padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
-                      minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    {isInCart(plate.plateId, 'plate') ? "In Cart" : "Add to Cart"}
-                  </Button>
-                )}
-                {showBuyNowButton && (
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    size="small"
-                    startIcon={<BuyNowIcon sx={{ fontSize: { xs: 'clamp(14px, 1.5vw, 16px)', sm: 'clamp(16px, 1.5vw, 18px)' } }} />}
-                    onClick={handleBuyNow}
-                    fullWidth
-                    sx={{
-                      fontSize: { xs: 'clamp(0.625rem, 1vw, 0.7rem)', sm: 'clamp(0.7rem, 1vw, 0.8rem)' },
-                      padding: { xs: 'clamp(6px, 1vw, 8px) clamp(12px, 2vw, 16px)', sm: 'clamp(8px, 1vw, 10px) clamp(16px, 2vw, 20px)' },
-                      minHeight: { xs: 'clamp(32px, 4vh, 36px)', sm: 'clamp(36px, 5vh, 40px)' },
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
-                      overflow: 'hidden'
-                    }}
-                  >
-                    Buy Now
-                  </Button>
-                )}
-              </Box>
+                {isInCart(plate.plateId, 'plate') ? "In Cart" : "Add to Cart"}
+              </Button>
             </Box>
           )}
 
@@ -556,8 +630,19 @@ const PlateCard: React.FC<PlateCardProps> = ({
           <DatePickerDialog
             open={datePickerOpen}
             onClose={() => {
+              console.log('🍽️ DatePickerDialog onClose called');
+              console.log('🍽️ openingDishSelectorRef.current:', openingDishSelectorRef.current);
+              // Only reset pendingCartAction if we're NOT opening the dish selector
+              // If dish selector is about to open, we need to keep pendingCartAction
+              // We'll reset it when dish selector is cancelled or confirmed
+              if (!openingDishSelectorRef.current) {
+                console.log('🍽️ Not opening dish selector, resetting pendingCartAction');
+                setPendingCartAction(null);
+                setPendingBookingDate(undefined);
+              } else {
+                console.log('🍽️ Opening dish selector, keeping pendingCartAction');
+              }
               setDatePickerOpen(false);
-              setPendingCartAction(null);
             }}
             onConfirm={handleDateConfirm}
             itemId={plate.plateId}

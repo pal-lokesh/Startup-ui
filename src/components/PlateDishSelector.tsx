@@ -95,9 +95,13 @@ const PlateDishSelector: React.FC<PlateDishSelectorProps> = ({
   };
 
   const handleConfirm = () => {
+    console.log('🍽️ PlateDishSelector handleConfirm called');
     const dishesArray = Array.from(selectedDishes.values());
+    console.log('🍽️ Selected dishes array:', dishesArray);
+    console.log('🍽️ Calling onConfirm with dishes:', dishesArray);
     onConfirm(dishesArray);
     setSelectedDishes(new Map());
+    console.log('🍽️ PlateDishSelector: Called onConfirm and reset selectedDishes');
   };
 
   const handleCancel = () => {
